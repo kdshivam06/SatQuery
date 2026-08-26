@@ -1,93 +1,125 @@
-"""Parallel-ish execution of planned tools with trace-friendly results."""
+"""Parallel DAG executor based on resource lanes."""
 
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
-from time import perf_counter
+import logging
+import time
 
+from backend.agent.planner_schema import ExecutionPlan
+from backend.agent.resource_scheduler import get_semaphore
+from backend.agent.trace_logger import TraceLogger
 from backend.tools.registry import TOOL_REGISTRY
 
-
-RESOURCE_LIMITS = {
-    "cpu": asyncio.Semaphore(8),
-    "gpu_0_light": asyncio.Semaphore(2),
-    "gpu_0_heavy": asyncio.Semaphore(1),
-}
+logger = logging.getLogger(__name__)
 
 
-async def execute_plan(plan: dict, context: dict) -> dict[str, dict]:
-    """Execute plan steps as soon as dependencies are available."""
+async def execute_plan(
+    plan: ExecutionPlan,
+    context: dict,
+    trace: TraceLogger,
+) -> dict[str, dict]:
+    """Execute tools according to the plan's parallel groups and dependencies."""
 
     results: dict[str, dict] = {}
-    pending = {step["id"]: step for step in plan.get("steps", [])}
+    
+    # Log skipped tools upfront
+    for skipped in plan.skipped_tools:
+        trace.log_tool(skipped.tool, status="skipped", reason=skipped.reason)
 
-    while pending:
-        ready = [
-            step
-            for step in pending.values()
-            if all(dep in results for dep in step.get("depends_on", []))
-        ]
-        if not ready:
-            raise RuntimeError(f"Plan has unresolved dependencies: {list(pending)}")
+    for group_idx, group in enumerate(plan.parallel_groups):
+        logger.info("Executing parallel group %s: %s", group_idx, [s.tool for s in group.steps])
 
-        completed = await asyncio.gather(
-            *[_run_step(step, context, results) for step in ready],
-            return_exceptions=True,
-        )
-        for step, result in zip(ready, completed):
-            if isinstance(result, Exception):
-                results[step["id"]] = _failed_result(step, result)
-            else:
-                results[step["id"]] = result
-            del pending[step["id"]]
+        if group.can_run_parallel:
+            tasks = [
+                _run_step_safely(step, context, results, trace)
+                for step in group.steps
+            ]
+            group_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for step, res in zip(group.steps, group_results):
+                if isinstance(res, Exception):
+                    logger.error("Step %s failed abruptly: %s", step.tool, res)
+                    results[step.tool] = {
+                        "status": "failed",
+                        "error": str(res),
+                        "summary": f"Unhandled exception: {res}",
+                    }
+                    trace.log_tool(step.tool, status="failed", reason=str(res))
+                else:
+                    results[step.tool] = res
+        else:
+            # Sequential execution for this group (e.g., validation)
+            for step in group.steps:
+                try:
+                    res = await _run_step_safely(step, context, results, trace)
+                    results[step.tool] = res
+                except Exception as exc:
+                    logger.error("Step %s failed abruptly: %s", step.tool, exc)
+                    results[step.tool] = {
+                        "status": "failed",
+                        "error": str(exc),
+                        "summary": f"Unhandled exception: {exc}",
+                    }
+                    trace.log_tool(step.tool, status="failed", reason=str(exc))
 
     return results
 
 
-async def _run_step(step: dict, context: dict, results: dict[str, dict]) -> dict:
-    tool = TOOL_REGISTRY[step["tool"]]
-    resource = step.get("resource", tool.resource)
-    semaphore = RESOURCE_LIMITS.get(resource, RESOURCE_LIMITS["cpu"])
-    started = _now()
-    start = perf_counter()
+async def _run_step_safely(
+    step,
+    context: dict,
+    prior_results: dict[str, dict],
+    trace: TraceLogger,
+) -> dict:
+    """Execute a single tool with semaphore protection and tracing."""
 
-    async with semaphore:
-        output = await tool.run(context, step.get("params", {}), results)
+    tool_instance = TOOL_REGISTRY.get(step.tool)
+    if not tool_instance:
+        msg = f"Tool {step.tool} not found in registry."
+        logger.warning(msg)
+        trace.log_tool(step.tool, status="failed", reason=msg)
+        return {"status": "failed", "error": msg, "summary": msg}
 
-    runtime_ms = int((perf_counter() - start) * 1000)
-    return {
-        "step_id": step["id"],
-        "tool_name": tool.name,
-        "status": output.get("status", "success"),
-        "started_at": started,
-        "finished_at": _now(),
-        "runtime_ms": runtime_ms,
-        "resource": resource,
-        "parameters": step.get("params", {}),
-        "outputs": output.get("outputs", {}),
-        "confidence": output.get("confidence"),
-        "summary": output.get("summary", ""),
-        "artifacts": output.get("artifacts", []),
-    }
+    semaphore = get_semaphore(step.resource_lane)
 
+    start_time = time.monotonic()
+    run_mode = getattr(tool_instance, "run_mode", "static_function")
+    
+    logger.info("Acquiring %s lane for %s...", step.resource_lane, step.tool)
+    try:
+        async with semaphore:
+            logger.info("Running %s...", step.tool)
+            result = await tool_instance.run(context, step.params, prior_results)
+    except Exception as exc:
+        logger.exception("Error running tool %s: %s", step.tool, exc)
+        result = {
+            "status": "failed",
+            "run_mode": run_mode,
+            "resource_lane": step.resource_lane,
+            "error": str(exc),
+            "summary": f"Failed: {exc}",
+        }
 
-def _failed_result(step: dict, exc: Exception) -> dict:
-    return {
-        "step_id": step["id"],
-        "tool_name": step.get("tool"),
-        "status": "failed",
-        "started_at": _now(),
-        "finished_at": _now(),
-        "runtime_ms": 0,
-        "resource": step.get("resource", "cpu"),
-        "parameters": step.get("params", {}),
-        "outputs": {"error": str(exc)},
-        "confidence": 0.0,
-        "summary": f"Tool failed: {exc}",
-        "artifacts": [],
-    }
+    runtime_ms = int((time.monotonic() - start_time) * 1000)
 
+    # Standardize result
+    if "status" not in result:
+        result["status"] = "success"
+    if "runtime_ms" not in result:
+        result["runtime_ms"] = runtime_ms
+    if "run_mode" not in result:
+        result["run_mode"] = run_mode
+    if "resource_lane" not in result:
+        result["resource_lane"] = step.resource_lane
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    trace.log_tool(
+        step.tool,
+        run_mode=result["run_mode"],
+        status=result["status"],
+        runtime_ms=runtime_ms,
+        summary=result.get("summary", ""),
+        confidence=result.get("confidence"),
+        reason=result.get("reason"),
+    )
+
+    return result

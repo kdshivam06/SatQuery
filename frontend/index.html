@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SatQuery AI — Analysis Cockpit</title>
+<meta name="description" content="Agentic remote-sensing AI assistant for satellite imagery analysis">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0e1a;--surface:#111827;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#3b82f6;--accent2:#8b5cf6;--green:#4ade80;--yellow:#fbbf24;--red:#f87171;--cyan:#22d3ee}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* ── Layout ─────────────────────────── */
+.app{display:grid;grid-template-rows:56px 1fr;height:100vh}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 1.5rem;gap:1rem;z-index:10}
+.topbar h1{font-size:1.1rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar .tag{font-size:.7rem;background:var(--card);color:var(--muted);padding:.15rem .5rem;border-radius:8px}
+.main{display:grid;grid-template-columns:380px 1fr;overflow:hidden}
+
+/* ── Left Panel ─────────────────────── */
+.left{background:var(--surface);border-right:1px solid var(--border);padding:1.25rem;display:flex;flex-direction:column;gap:1rem;overflow-y:auto}
+.section-title{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem}
+
+/* Upload */
+.dropzone{border:2px dashed var(--border);border-radius:12px;padding:2rem 1rem;text-align:center;cursor:pointer;transition:all .2s}
+.dropzone:hover,.dropzone.drag-over{border-color:var(--accent);background:rgba(59,130,246,.05)}
+.dropzone .icon{font-size:2rem;margin-bottom:.5rem}
+.dropzone p{font-size:.85rem;color:var(--muted)}
+.dropzone .formats{font-size:.7rem;color:var(--border);margin-top:.3rem}
+#file-input{display:none}
+.file-list{display:flex;flex-direction:column;gap:.3rem}
+.file-item{display:flex;align-items:center;justify-content:space-between;background:var(--card);padding:.4rem .6rem;border-radius:8px;font-size:.8rem}
+.file-item .remove{cursor:pointer;color:var(--red);font-weight:700}
+
+/* Query */
+.query-box{display:flex;flex-direction:column;gap:.5rem}
+.query-box textarea{background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:.6rem .8rem;font-size:.85rem;font-family:inherit;resize:vertical;min-height:70px;outline:none;transition:border .2s}
+.query-box textarea:focus{border-color:var(--accent)}
+.mode-row{display:flex;gap:.4rem}
+.mode-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:.3rem .7rem;border-radius:8px;font-size:.72rem;cursor:pointer;transition:all .2s}
+.mode-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.submit-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;padding:.6rem 1rem;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer;transition:transform .1s}
+.submit-btn:hover{transform:scale(1.02)}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+/* Demo scenarios */
+.demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.demo-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:.4rem .5rem;border-radius:8px;font-size:.7rem;cursor:pointer;text-align:left;transition:all .15s}
+.demo-btn:hover{border-color:var(--accent);color:var(--text)}
+
+/* ── Right / Results Panel ──────────── */
+.right{padding:1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:1.25rem}
+.status-bar{display:flex;align-items:center;gap:.8rem}
+.status-badge{padding:.25rem .75rem;border-radius:20px;font-size:.75rem;font-weight:600}
+.status-badge.queued{background:#1e293b;color:var(--muted)}
+.status-badge.routing,.status-badge.ingesting{background:#1e1b4b;color:var(--accent2)}
+.status-badge.executing{background:#172554;color:var(--accent)}
+.status-badge.completed{background:#052e16;color:var(--green)}
+.status-badge.failed{background:#450a0a;color:var(--red)}
+.progress-bar{flex:1;height:6px;background:var(--card);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s ease}
+
+/* Answer */
+.answer-card{background:var(--card);border-left:4px solid var(--accent);border-radius:0 12px 12px 0;padding:1rem 1.2rem;line-height:1.7;font-size:.9rem}
+.confidence-row{display:flex;align-items:center;gap:.8rem;margin-top:.8rem}
+.conf-meter{width:120px;height:10px;background:var(--border);border-radius:5px;overflow:hidden}
+.conf-fill{height:100%;border-radius:5px;transition:width .6s ease}
+.conf-label{font-size:.85rem;font-weight:600}
+
+/* Evidence */
+.evidence-list{display:flex;flex-direction:column;gap:.3rem}
+.evidence-item{background:var(--surface);border:1px solid var(--border);padding:.5rem .7rem;border-radius:8px;font-size:.78rem;line-height:1.5;font-family:'Cascadia Code','Fira Code',monospace}
+
+/* Visual outputs */
+.visuals-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.8rem}
+.visual-card{background:var(--card);border-radius:10px;overflow:hidden}
+.visual-card img{width:100%;display:block}
+.visual-card .label{padding:.4rem .6rem;font-size:.75rem;color:var(--muted)}
+
+/* Trace graph */
+.trace-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem}
+.trace-groups{display:flex;flex-direction:column;gap:.6rem}
+.trace-group{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.trace-group-label{font-size:.7rem;color:var(--muted);font-weight:600;width:60px;flex-shrink:0}
+.tool-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .6rem;border-radius:8px;font-size:.72rem;font-weight:500;border:1px solid var(--border)}
+.tool-chip.success{background:#052e1660;color:var(--green);border-color:#166534}
+.tool-chip.skipped{background:#1e1b4b40;color:var(--accent2);border-color:#4338ca}
+.tool-chip.failed{background:#450a0a40;color:var(--red);border-color:#991b1b}
+.tool-chip.running{background:#17255440;color:var(--cyan);border-color:#1e40af;animation:pulse 1.5s infinite}
+.tool-chip .ms{font-size:.65rem;color:var(--muted)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* Tool timeline */
+.timeline{display:flex;flex-direction:column;gap:.2rem;margin-top:.5rem}
+.timeline-row{display:flex;align-items:center;gap:.5rem;font-size:.72rem}
+.timeline-name{width:180px;text-align:right;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.timeline-bar-bg{flex:1;height:8px;background:var(--card);border-radius:4px;overflow:hidden;position:relative}
+.timeline-bar{height:100%;border-radius:4px;min-width:2px}
+.timeline-ms{width:50px;font-size:.65rem;color:var(--muted);text-align:right}
+
+/* Report button */
+.report-row{display:flex;gap:.5rem;margin-top:.5rem}
+.report-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:.4rem .8rem;border-radius:8px;font-size:.78rem;cursor:pointer;transition:all .15s;text-decoration:none}
+.report-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Empty state */
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--border);gap:.5rem}
+.empty-state .big{font-size:3rem}
+.empty-state p{font-size:.9rem;color:var(--muted)}
+
+/* Responsive */
+@media(max-width:800px){.main{grid-template-columns:1fr}.left{max-height:45vh}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <h1>🛰️ SatQuery AI</h1>
+    <span class="tag">v0.2</span>
+    <span class="tag" id="health-tag">connecting...</span>
+    <div style="flex:1"></div>
+    <span class="tag" id="router-tag">router: –</span>
+    <span class="tag" id="tools-tag">tools: –</span>
+  </div>
+
+  <div class="main">
+    <!-- Left Panel -->
+    <div class="left">
+      <div>
+        <div class="section-title">Upload Images</div>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <div class="icon">📡</div>
+          <p>Drop satellite images here</p>
+          <div class="formats">GeoTIFF, .npy patches, .tif, .png</div>
+        </div>
+        <input type="file" id="file-input" multiple accept=".tif,.tiff,.npy,.png,.jpg,.jpeg">
+        <div class="file-list" id="file-list"></div>
+      </div>
+
+      <div class="query-box">
+        <div class="section-title">Query</div>
+        <textarea id="query" placeholder="e.g. What percentage of this area is covered by water?"></textarea>
+        <div class="mode-row">
+          <button class="mode-btn active" data-mode="auto">Auto</button>
+          <button class="mode-btn" data-mode="single">Single</button>
+          <button class="mode-btn" data-mode="cross_modal">Cross-Modal</button>
+          <button class="mode-btn" data-mode="temporal">Temporal</button>
+        </div>
+        <button class="submit-btn" id="submit-btn" onclick="submitAnalysis()">🚀 Analyze</button>
+      </div>
+
+      <div>
+        <div class="section-title">Demo Scenarios</div>
+        <div class="demo-grid">
+          <button class="demo-btn" onclick="setDemo('Describe the land cover in this scene','auto')">🌍 Land Cover</button>
+          <button class="demo-btn" onclick="setDemo('Detect water bodies and estimate area','auto')">💧 Water Detection</button>
+          <button class="demo-btn" onclick="setDemo('Highlight urban/built-up regions','auto')">🏙️ Urban Areas</button>
+          <button class="demo-btn" onclick="setDemo('What has changed between these two dates?','temporal')">🔄 Change Analysis</button>
+          <button class="demo-btn" onclick="setDemo('Compare SAR and optical modalities','cross_modal')">📡 Cross-Modal</button>
+          <button class="demo-btn" onclick="setDemo('Show vegetation health using NDVI','auto')">🌿 NDVI Vegetation</button>
+        </div>
+      </div>
+
+      <div id="runs-list-section">
+        <div class="section-title">Recent Runs</div>
+        <div id="runs-list" class="file-list"></div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="right" id="results">
+      <div class="empty-state" id="empty-state">
+        <div class="big">🛰️</div>
+        <p>Upload satellite images and ask a question to get started.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let selectedFiles = [];
+let currentMode = 'auto';
+let currentRunId = null;
+let pollTimer = null;
+
+// ── Health check ─────────────────────
+fetch(`${API}/health`).then(r=>r.json()).then(d=>{
+  document.getElementById('health-tag').textContent='online';
+  document.getElementById('health-tag').style.color='#4ade80';
+  document.getElementById('router-tag').textContent=`router: ${d.router_mode||'–'}`;
+  document.getElementById('tools-tag').textContent=`tools: ${d.tools_enabled||0}`;
+}).catch(()=>{
+  document.getElementById('health-tag').textContent='offline';
+  document.getElementById('health-tag').style.color='#f87171';
+});
+
+// ── Load recent runs ─────────────────
+fetch(`${API}/api/runs?limit=5`).then(r=>r.json()).then(d=>{
+  const list=document.getElementById('runs-list');
+  (d.runs||[]).forEach(r=>{
+    const el=document.createElement('div');
+    el.className='file-item';
+    el.style.cursor='pointer';
+    el.innerHTML=`<span>${r.run_id.slice(0,16)} · ${r.status}</span><span style="font-size:.7rem;color:#94a3b8">${(r.query||'').slice(0,30)}</span>`;
+    el.onclick=()=>loadRun(r.run_id);
+    list.appendChild(el);
+  });
+}).catch(()=>{});
+
+// ── File handling ────────────────────
+const dz=document.getElementById('dropzone');
+const fi=document.getElementById('file-input');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');addFiles(e.dataTransfer.files)});
+fi.addEventListener('change',e=>addFiles(e.target.files));
+
+function addFiles(files){
+  for(const f of files)selectedFiles.push(f);
+  renderFiles();
+}
+function renderFiles(){
+  const list=document.getElementById('file-list');
+  list.innerHTML='';
+  selectedFiles.forEach((f,i)=>{
+    const el=document.createElement('div');
+    el.className='file-item';
+    el.innerHTML=`<span>📄 ${f.name} (${(f.size/1024).toFixed(0)}KB)</span><span class="remove" onclick="removeFile(${i})">✕</span>`;
+    list.appendChild(el);
+  });
+}
+function removeFile(i){selectedFiles.splice(i,1);renderFiles()}
+
+// ── Mode selection ───────────────────
+document.querySelectorAll('.mode-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode=btn.dataset.mode;
+  });
+});
+
+function setDemo(query,mode){
+  document.getElementById('query').value=query;
+  document.querySelectorAll('.mode-btn').forEach(b=>{
+    b.classList.toggle('active',b.dataset.mode===mode);
+  });
+  currentMode=mode;
+}
+
+// ── Submit ───────────────────────────
+async function submitAnalysis(){
+  const query=document.getElementById('query').value.trim();
+  if(!query){alert('Please enter a query.');return}
+  if(!selectedFiles.length){alert('Please upload at least one image.');return}
+
+  const btn=document.getElementById('submit-btn');
+  btn.disabled=true;btn.textContent='⏳ Submitting...';
+
+  const fd=new FormData();
+  fd.append('query',query);
+  fd.append('mode',currentMode);
+  selectedFiles.forEach(f=>fd.append('files',f));
+
+  try{
+    const res=await fetch(`${API}/api/analyze`,{method:'POST',body:fd});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Analysis failed');
+    currentRunId=data.run_id;
+    btn.textContent='🚀 Analyze';btn.disabled=false;
+    startPolling(data.run_id);
+  }catch(err){
+    btn.textContent='🚀 Analyze';btn.disabled=false;
+    alert('Error: '+err.message);
+  }
+}
+
+// ── Polling ──────────────────────────
+function startPolling(runId){
+  renderLoading(runId);
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(()=>pollRun(runId),1500);
+  pollRun(runId);
+}
+
+async function pollRun(runId){
+  try{
+    const res=await fetch(`${API}/api/runs/${runId}`);
+    const data=await res.json();
+    renderResults(data);
+    if(data.status==='completed'||data.status==='failed'){
+      clearInterval(pollTimer);pollTimer=null;
+    }
+  }catch(err){console.error(err)}
+}
+
+async function loadRun(runId){
+  currentRunId=runId;
+  try{
+    const res=await fetch(`${API}/api/runs/${runId}`);
+    const data=await res.json();
+    renderResults(data);
+    if(data.status!=='completed'&&data.status!=='failed')startPolling(runId);
+  }catch(err){alert('Failed to load run: '+err.message)}
+}
+
+// ── Rendering ────────────────────────
+function renderLoading(runId){
+  const el=document.getElementById('results');
+  el.innerHTML=`
+    <div class="status-bar">
+      <span class="status-badge routing">⏳ queued</span>
+      <div class="progress-bar"><div class="progress-fill" style="width:5%"></div></div>
+    </div>
+    <div class="answer-card" style="color:var(--muted)">Submitting analysis for ${runId}...</div>
+  `;
+  document.getElementById('empty-state')?.remove();
+}
+
+function renderResults(data){
+  const el=document.getElementById('results');
+  const status=data.status||'unknown';
+  const progress=(data.progress||0)*100;
+  const conf=data.confidence;
+  const confPct=conf!=null?Math.round(conf*100)+'%':'–';
+  const confColor=conf>0.7?'var(--green)':conf>0.5?'var(--yellow)':'var(--red)';
+
+  let html=`<div class="status-bar">
+    <span class="status-badge ${status}">${status}</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:${status==='completed'?100:progress}%"></div></div>
+    <span style="font-size:.8rem;color:var(--muted)">${data.run_id||''}</span>
+  </div>`;
+
+  if(data.answer){
+    html+=`<div>
+      <div class="section-title">Answer</div>
+      <div class="answer-card">${escHtml(data.answer)}</div>
+      <div class="confidence-row">
+        <span class="conf-label" style="color:${confColor}">${confPct}</span>
+        <div class="conf-meter"><div class="conf-fill" style="width:${conf?conf*100:0}%;background:${confColor}"></div></div>
+        <span style="font-size:.75rem;color:var(--muted)">confidence</span>
+      </div>
+    </div>`;
+  }else if(data.current_step){
+    html+=`<div class="answer-card" style="color:var(--muted)">⏳ ${escHtml(data.current_step)}...</div>`;
+  }
+
+  // Evidence
+  const evidence=data.evidence||[];
+  if(evidence.length){
+    html+=`<div><div class="section-title">Evidence (${evidence.length})</div><div class="evidence-list">`;
+    evidence.forEach(e=>html+=`<div class="evidence-item">${escHtml(e)}</div>`);
+    html+=`</div></div>`;
+  }
+
+  // Visuals
+  const visuals=data.visual_outputs||[];
+  if(visuals.length){
+    html+=`<div><div class="section-title">Visual Outputs</div><div class="visuals-grid">`;
+    visuals.forEach(v=>{
+      const url=v.url.startsWith('/')?v.url:`/files/${data.run_id}/${v.url.replace(/\\\\/g,'/')}`;
+      html+=`<div class="visual-card"><img src="${url}" onerror="this.parentElement.style.display='none'" loading="lazy"><div class="label">${escHtml(v.label||v.type||'')}</div></div>`;
+    });
+    html+=`</div></div>`;
+  }
+
+  // Trace
+  const trace=data.trace||{};
+  const toolLogs=trace.tool_logs||[];
+  const groups=trace.parallel_groups||[];
+  if(toolLogs.length||groups.length){
+    html+=`<div class="trace-section"><div class="section-title">Execution Trace</div>`;
+    if(groups.length){
+      html+=`<div class="trace-groups">`;
+      groups.forEach((g,i)=>{
+        html+=`<div class="trace-group"><span class="trace-group-label">G${i+1}</span>`;
+        g.forEach(t=>{
+          const log=toolLogs.find(l=>l.tool===t)||{};
+          const s=log.status||'running';
+          const ms=log.runtime_ms?` <span class="ms">${log.runtime_ms}ms</span>`:'';
+          html+=`<span class="tool-chip ${s}">${t}${ms}</span>`;
+        });
+        html+=`</div>`;
+      });
+      html+=`</div>`;
+    }
+    // Timeline
+    if(toolLogs.length){
+      const maxMs=Math.max(...toolLogs.map(l=>l.runtime_ms||0),1);
+      html+=`<div class="timeline">`;
+      toolLogs.forEach(l=>{
+        const w=Math.max(2,(l.runtime_ms||0)/maxMs*100);
+        const color=l.status==='success'?'var(--green)':l.status==='skipped'?'var(--accent2)':'var(--red)';
+        html+=`<div class="timeline-row">
+          <span class="timeline-name">${l.tool}</span>
+          <div class="timeline-bar-bg"><div class="timeline-bar" style="width:${w}%;background:${color}"></div></div>
+          <span class="timeline-ms">${l.runtime_ms||0}ms</span>
+        </div>`;
+      });
+      html+=`</div>`;
+    }
+    html+=`</div>`;
+  }
+
+  // Report buttons
+  if(status==='completed'){
+    html+=`<div class="report-row">
+      <a class="report-btn" href="${API}/api/runs/${data.run_id}/report?format=html" target="_blank">📄 HTML Report</a>
+      <a class="report-btn" href="${API}/api/runs/${data.run_id}/report?format=json" target="_blank">📋 JSON Report</a>
+    </div>`;
+  }
+
+  el.innerHTML=html;
+}
+
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+</script>
+</body>
+</html>

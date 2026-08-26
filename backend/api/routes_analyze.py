@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 
-from backend.agent.controller import run_analysis
 from backend.api.schemas import AnalyzePathsRequest, AnalyzeResponse, Benv1AnalyzeRequest
 from backend.geospatial.benv1_selector import select_benv1_pair
 from backend.storage.file_store import save_upload_file
@@ -15,6 +14,65 @@ from backend.storage.run_store import RunStore
 
 router = APIRouter(prefix="/api", tags=["analyze"])
 store = RunStore()
+
+
+async def _ingest_and_run(
+    run_id: str,
+    query: str,
+    paths: list[str],
+    run_dir: Path,
+    *,
+    mode: str = "auto",
+    generate_pdf: bool = True,
+    generate_model_inputs: bool = True,
+    dataset_pair: dict | None = None,
+):
+    """Background task: ingest → plan → execute → fuse → save state."""
+    from backend.geospatial.pipeline import ingest_pair
+    from backend.agent.controller import run_analysis
+    from backend.reports.report_builder import build_report
+
+    try:
+        store.update(run_id, status="ingesting", current_step="ingesting")
+
+        # ── Ingest ────────────────────────────────────────
+        manifest = ingest_pair(
+            paths,
+            run_dir / "ingestion",
+            generate_pdf=generate_pdf,
+            generate_model_inputs=generate_model_inputs,
+        )
+        if dataset_pair:
+            manifest["dataset_pair"] = dataset_pair
+
+        store.update(run_id, status="routing", manifest=manifest)
+
+        # ── Run analysis pipeline ─────────────────────────
+        def update_state(rid, data):
+            safe = {k: v for k, v in data.items() if k != "run_id"}
+            store.update(rid, **safe)
+
+        result = await run_analysis(
+            run_id=run_id,
+            run_dir=str(run_dir),
+            query=query,
+            manifest=manifest,
+            mode=mode,
+            update_state=update_state,
+        )
+
+        # ── Generate report ───────────────────────────────
+        try:
+            report_paths = build_report(result, run_dir)
+            result["report"] = report_paths
+        except Exception:
+            pass
+
+        safe_result = {k: v for k, v in result.items() if k != "run_id"}
+        store.update(run_id, **safe_result)
+
+    except Exception as exc:
+        store.update(run_id, status="failed", error=str(exc))
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -32,7 +90,7 @@ async def analyze_uploads(
     saved_paths = []
     for uploaded in files:
         saved_paths.append(save_upload_file(uploaded.file, uploaded.filename or "upload.bin", upload_dir))
-    background_tasks.add_task(run_analysis, state["run_id"], query, saved_paths, run_dir, mode=mode)
+    background_tasks.add_task(_ingest_and_run, state["run_id"], query, saved_paths, run_dir, mode=mode)
     return AnalyzeResponse(run_id=state["run_id"], status="queued")
 
 
@@ -49,7 +107,7 @@ async def analyze_paths(payload: AnalyzePathsRequest, background_tasks: Backgrou
     state = store.create_run(payload.query, mode=payload.mode)
     run_dir = store.run_dir(state["run_id"])
     background_tasks.add_task(
-        run_analysis,
+        _ingest_and_run,
         state["run_id"],
         payload.query,
         payload.paths,
@@ -81,7 +139,7 @@ async def analyze_benv1(payload: Benv1AnalyzeRequest, background_tasks: Backgrou
     state = store.create_run(payload.query, mode=payload.mode)
     run_dir = store.run_dir(state["run_id"])
     background_tasks.add_task(
-        run_analysis,
+        _ingest_and_run,
         state["run_id"],
         payload.query,
         [pair.s1_path, pair.s2_path],
