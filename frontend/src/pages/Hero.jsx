@@ -1,115 +1,160 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../styles/hero.css';
 
+const API = '';
+
 const Hero = ({ isPreloaded = true }) => {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [queryInput, setQueryInput] = useState('');
-  const [isWorkflowActive, setIsWorkflowActive] = useState(false);
-  const [activeStep, setActiveStep] = useState(0);
-  const [workflowLogs, setWorkflowLogs] = useState([
-    { time: '00:00.12', text: 'System ready. Waiting for input query or GeoTIFF data.' },
-  ]);
-  const [generatedInfo, setGeneratedInfo] = useState(null);
+  // State
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [query, setQuery] = useState('');
+  const [currentMode, setCurrentMode] = useState('auto');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentRunId, setCurrentRunId] = useState(null);
+  const [runData, setRunData] = useState(null);
+  const [recentRuns, setRecentRuns] = useState([]);
+  const [health, setHealth] = useState({
+    status: 'connecting...',
+    routerMode: '–',
+    toolsEnabled: '–',
+    color: '#94a3b8'
+  });
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const fileInputRef = useRef(null);
+  const pollTimerRef = useRef(null);
 
-  // Workflow steps pipeline
-  const workflowSteps = [
-    { label: 'GeoTIFF Georeference & CRS Validation', status: 'idle' },
-    { label: 'Multi-Spectral Band Alignment (B4, B8, B11)', status: 'idle' },
-    { label: 'Vegetation & Water Index Computation (NDVI/NDWI)', status: 'idle' },
-    { label: 'Llama-B-17 AI Query Synthesis', status: 'idle' },
-  ];
-
-  // Handle Drag & Drop
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
+  // 1. Health check
+  const fetchHealth = () => {
+    fetch(`${API}/health`)
+      .then((r) => r.json())
+      .then((d) => {
+        setHealth({
+          status: 'online',
+          routerMode: d.router_mode || '–',
+          toolsEnabled: d.tools_enabled || 0,
+          color: '#4ade80'
+        });
+      })
+      .catch(() => {
+        setHealth({
+          status: 'offline',
+          routerMode: '–',
+          toolsEnabled: '–',
+          color: '#f87171'
+        });
+      });
   };
 
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
+  // 2. Fetch Recent Runs
+  const fetchRecentRuns = () => {
+    fetch(`${API}/api/runs?limit=5`)
+      .then((r) => r.json())
+      .then((d) => {
+        setRecentRuns(d.runs || []);
+      })
+      .catch(() => {});
   };
 
-  const processFile = (file) => {
-    if (!file) return;
-    const isGeoTIFF = file.name.endsWith('.tif') || file.name.endsWith('.tiff') || file.name.endsWith('.geotiff');
-    
-    setSelectedFile({
-      name: file.name,
-      size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-      type: file.type || 'image/tiff',
-      isValidGeoTIFF: isGeoTIFF,
-      crs: 'EPSG:4326 (WGS 84)',
-      bands: 'RGB + NIR + SWIR (04 Bands)',
-    });
+  useEffect(() => {
+    fetchHealth();
+    fetchRecentRuns();
 
-    addLog(`Loaded file: ${file.name} [${(file.size / (1024 * 1024)).toFixed(2)} MB]`);
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
+  // Polling logic
+  const pollRun = async (runId) => {
+    try {
+      const res = await fetch(`${API}/api/runs/${runId}`);
+      const data = await res.json();
+      setRunData(data);
+      if (data.status === 'completed' || data.status === 'failed') {
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        fetchRecentRuns();
+      }
+    } catch (err) {
+      console.error('Error polling run:', err);
+    }
+  };
+
+  const startPolling = (runId) => {
+    setCurrentRunId(runId);
+    setRunData({ run_id: runId, status: 'queued', progress: 0.05 });
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    pollTimerRef.current = setInterval(() => pollRun(runId), 1500);
+    pollRun(runId);
+  };
+
+  const loadRun = async (runId) => {
+    setCurrentRunId(runId);
+    try {
+      const res = await fetch(`${API}/api/runs/${runId}`);
+      const data = await res.json();
+      setRunData(data);
+      if (data.status !== 'completed' && data.status !== 'failed') {
+        startPolling(runId);
+      }
+    } catch (err) {
+      alert('Failed to load run: ' + err.message);
+    }
+  };
+
+  // File Handlers
+  const handleAddFiles = (files) => {
+    const newFiles = Array.from(files);
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
+  };
+
+  const handleRemoveFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile(e.dataTransfer.files[0]);
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleAddFiles(e.dataTransfer.files);
     }
   };
 
-  const handleFileSelect = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
+  // Submit Analysis
+  const handleSubmitAnalysis = async () => {
+    if (!query.trim()) {
+      alert('Please enter a query.');
+      return;
+    }
+    if (!selectedFiles.length) {
+      alert('Please upload at least one image.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const fd = new FormData();
+    fd.append('query', query.trim());
+    fd.append('mode', currentMode);
+    selectedFiles.forEach((f) => fd.append('files', f));
+
+    try {
+      const res = await fetch(`${API}/api/analyze`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+      setIsSubmitting(false);
+      startPolling(data.run_id);
+    } catch (err) {
+      setIsSubmitting(false);
+      alert('Error: ' + err.message);
     }
   };
 
-  const addLog = (msg) => {
-    const timestamp = new Date().toISOString().substring(14, 22);
-    setWorkflowLogs((prev) => [...prev.slice(-8), { time: timestamp, text: msg }]);
-  };
-
-  // Simulate Workflow Execution when user runs a query
-  const handleRunQuery = () => {
-    if (!queryInput.trim() && !selectedFile) return;
-
-    setIsWorkflowActive(true);
-    setActiveStep(1);
-    addLog(`Initiating workflow query: "${queryInput || 'Default GeoTIFF Scan'}"`);
-
-    setTimeout(() => {
-      setActiveStep(2);
-      addLog('Extracting multi-spectral bands & georeferenced coordinates...');
-    }, 1000);
-
-    setTimeout(() => {
-      setActiveStep(3);
-      addLog('Calculating NDVI index & land classification matrices...');
-    }, 2000);
-
-    setTimeout(() => {
-      setActiveStep(4);
-      addLog('Synthesizing spatial intelligence output with Llama-B-17...');
-    }, 3000);
-
-    setTimeout(() => {
-      setActiveStep(5);
-      setIsWorkflowActive(false);
-      addLog('Query execution complete. Generated intelligence output updated below.');
-
-      // Update Generated Information Panel
-      setGeneratedInfo({
-        queryExecuted: queryInput || 'Satellite Raster Multi-Spectral Analysis',
-        filename: selectedFile ? selectedFile.name : 'SENTINEL2_AOI_KIRKLAND.tif',
-        bbox: '12.9716° N, 77.5946° E (AOI-Delta-X)',
-        meanNDVI: '0.742 (High Vegetation Density)',
-        meanNDWI: '-0.128 (Low Moisture Depletion)',
-        waterBodyArea: '14.2 km²',
-        aiSummary:
-          'Satellite imagery reveals dense canopy coverage with moderate surface water retention across the requested region. No thermal anomaly detected.',
-      });
-    }, 4000);
+  // Demo selection
+  const handleSetDemo = (demoQuery, mode) => {
+    setQuery(demoQuery);
+    setCurrentMode(mode);
   };
 
   return (
@@ -124,197 +169,366 @@ const Hero = ({ isPreloaded = true }) => {
           </div>
         </div>
 
+        <div className="header-status-tags">
+          <span className="status-tag" style={{ color: health.color }}>
+            ● {health.status}
+          </span>
+          <span className="status-tag">router: {health.routerMode}</span>
+          <span className="status-tag">tools: {health.toolsEnabled}</span>
+        </div>
+
         <nav className="hero-nav">
-          <a href="#workspace" className="nav-link">WORKSPACE</a>
-          <a href="#logs" className="nav-link">LOGS</a>
-          <a href="#guide" className="nav-link">GUIDE</a>
+          <a href="#workspace" className="nav-link">
+            WORKSPACE
+          </a>
+          <a href="#logs" className="nav-link">
+            LOGS
+          </a>
+          <a href="#guide" className="nav-link">
+            GUIDE
+          </a>
         </nav>
       </header>
 
-      {/* 2-Column Split Viewport Main Container */}
+      {/* 2-Column Dashboard Grid */}
       <div className="hero-viewport-grid">
-        
-        {/* LEFT COLUMN */}
+        {/* Left Column: Input & Controls */}
         <div className="grid-column left-column">
-          
-          {/* Top: GeoTIFF Drag & Drop Zone */}
+          {/* Upload Panel */}
           <div className="panel dropzone-panel">
             <div className="panel-header">
-              <span className="panel-badge">INPUT DATASET</span>
-              <span className="panel-title">GeoTIFF Raster Upload</span>
+              <span className="panel-title">// UPLOAD IMAGES</span>
+              <span className="panel-badge">GEOTIFF / PATCHES</span>
             </div>
 
             <div
-              className={`dropzone-box ${isDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
+              className={`dropzone-box ${isDragOver ? 'dragging' : ''} ${selectedFiles.length > 0 ? 'has-file' : ''}`}
               onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
             >
+              <div className="dropzone-text">
+                <p className="drop-prompt">Drop satellite images here or click to browse</p>
+                <p className="drop-subtext">GeoTIFF, .npy patches, .tif, .png, .jpg</p>
+              </div>
               <input
                 type="file"
                 ref={fileInputRef}
-                onChange={handleFileSelect}
-                accept=".tif,.tiff,.geotiff"
                 style={{ display: 'none' }}
+                multiple
+                accept=".tif,.tiff,.npy,.png,.jpg,.jpeg"
+                onChange={(e) => e.target.files && handleAddFiles(e.target.files)}
               />
-
-              <div className="dropzone-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-
-              <div className="dropzone-text">
-                {selectedFile ? (
-                  <div className="selected-file-info">
-                    <span className="file-name">{selectedFile.name}</span>
-                    <span className="file-meta">{selectedFile.size} • {selectedFile.crs}</span>
-                    <span className="file-status">✓ Georeferencing Verified</span>
-                  </div>
-                ) : (
-                  <>
-                    <p className="drop-prompt">Drag & Drop GeoTIFF (.tif / .geotiff) file here</p>
-                    <p className="drop-subtext">or click to browse your spatial raster files</p>
-                  </>
-                )}
-              </div>
-
-              <div className="geotiff-description">
-                <p>
-                  <strong>GeoTIFF Metadata Info:</strong> GeoTIFF files encapsulate georeferenced spatial rasters, coordinate reference systems (CRS), bounding coordinates, and multi-spectral satellite imagery bands used for Earth observation analytics.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom: Generated Information Container */}
-          <div className="panel results-panel">
-            <div className="panel-header">
-              <span className="panel-badge">OUTPUT INTELLIGENCE</span>
-              <span className="panel-title">Generated Analysis Information</span>
             </div>
 
-            <div className="results-content">
-              {generatedInfo ? (
-                <div className="results-grid">
-                  <div className="result-card">
-                    <span className="card-label">Target Query</span>
-                    <span className="card-value highlight">{generatedInfo.queryExecuted}</span>
-                  </div>
-
-                  <div className="result-card">
-                    <span className="card-label">Spatial Coordinates (BBox)</span>
-                    <span className="card-value">{generatedInfo.bbox}</span>
-                  </div>
-
-                  <div className="result-card-row">
-                    <div className="result-card">
-                      <span className="card-label">Mean NDVI</span>
-                      <span className="card-value metric">{generatedInfo.meanNDVI}</span>
-                    </div>
-                    <div className="result-card">
-                      <span className="card-label">Surface Water Area</span>
-                      <span className="card-value metric">{generatedInfo.waterBodyArea}</span>
-                    </div>
-                  </div>
-
-                  <div className="result-card full-width">
-                    <span className="card-label">Llama-B-17 Synthesis Report</span>
-                    <p className="ai-report">{generatedInfo.aiSummary}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="results-placeholder">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                    <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3"/>
-                    <path d="M3 9h18M9 21V9"/>
-                  </svg>
-                  <p>Generated analytics and spatial indices will appear here after executing a query.</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div className="grid-column right-column">
-          
-          {/* Top: Background Workflow Monitor Container */}
-          <div className="panel monitor-panel">
-            <div className="panel-header">
-              <span className={`panel-badge ${isWorkflowActive ? 'active-pulse' : ''}`}>
-                {isWorkflowActive ? 'WORKFLOW IN PROGRESS' : 'BACKGROUND MONITOR'}
-              </span>
-              <span className="panel-title">Pipeline Orchestrator</span>
-            </div>
-
-            <div className="workflow-pipeline">
-              {workflowSteps.map((step, idx) => {
-                const stepNum = idx + 1;
-                const isDone = activeStep > stepNum;
-                const isCurrent = activeStep === stepNum && isWorkflowActive;
-
-                return (
-                  <div key={idx} className={`pipeline-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}>
-                    <div className="step-indicator">
-                      {isDone ? '✓' : isCurrent ? '⚡' : stepNum}
-                    </div>
-                    <span className="step-label">{step.label}</span>
-                    <span className="step-status">
-                      {isDone ? 'COMPLETE' : isCurrent ? 'RUNNING' : 'WAITING'}
+            {selectedFiles.length > 0 && (
+              <div className="selected-files-list">
+                {selectedFiles.map((file, i) => (
+                  <div className="selected-file-item" key={i}>
+                    <span className="file-name">{file.name} ({(file.size / 1024).toFixed(0)}KB)</span>
+                    <span className="remove-file-btn" onClick={(e) => { e.stopPropagation(); handleRemoveFile(i); }}>
+                      ✕
                     </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Workflow Event Log Stream */}
-            <div className="log-stream">
-              <div className="log-stream-header">SYSTEM EVENTS LOG</div>
-              <div className="log-entries">
-                {workflowLogs.map((log, i) => (
-                  <div key={i} className="log-line">
-                    <span className="log-time">[{log.time}]</span>
-                    <span className="log-text">{log.text}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Bottom: Query Text Input Section */}
+          {/* Query & Mode Panel */}
           <div className="panel query-panel">
             <div className="panel-header">
-              <span className="panel-badge">QUERY CONSOLE</span>
-              <span className="panel-title">Natural Language Spatial Query</span>
+              <span className="panel-title">// QUERY INPUT</span>
+              <span className="panel-badge">MODE: {currentMode.toUpperCase()}</span>
             </div>
 
             <div className="query-input-box">
               <textarea
                 className="query-textarea"
-                value={queryInput}
-                onChange={(e) => setQueryInput(e.target.value)}
-                placeholder="Type your satellite query (e.g. Calculate vegetation health index, detect water bodies, or classify land cover)..."
-                rows={3}
-              />
+                placeholder="e.g. What percentage of this area is covered by water?"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              ></textarea>
+
+              <div className="mode-selector-row">
+                {['auto', 'single', 'cross_modal', 'temporal'].map((mode) => (
+                  <button
+                    key={mode}
+                    className={`mode-btn ${currentMode === mode ? 'active' : ''}`}
+                    onClick={() => setCurrentMode(mode)}
+                  >
+                    {mode.replace('_', '-').toUpperCase()}
+                  </button>
+                ))}
+              </div>
 
               <div className="query-actions">
-                <span className="keyboard-hint">Press Enter to execute</span>
+                <span className="keyboard-hint">SELECT MODE AND RUN ANALYSIS</span>
                 <button
-                  className={`run-query-btn ${isWorkflowActive ? 'disabled' : ''}`}
-                  onClick={handleRunQuery}
-                  disabled={isWorkflowActive}
+                  className={`run-query-btn ${isSubmitting ? 'disabled' : ''}`}
+                  onClick={handleSubmitAnalysis}
+                  disabled={isSubmitting}
                 >
-                  {isWorkflowActive ? 'Processing Pipeline...' : 'Run Query ⚡'}
+                  {isSubmitting ? 'SUBMITTING...' : 'ANALYZE'}
                 </button>
               </div>
             </div>
           </div>
 
+          {/* Demo Scenarios & Recent Runs */}
+          <div className="panel demo-runs-panel">
+            <div className="panel-header">
+              <span className="panel-title">// DEMO SCENARIOS</span>
+            </div>
+            <div className="demo-grid">
+              <button
+                className="demo-btn"
+                onClick={() => handleSetDemo('Describe the land cover in this scene', 'auto')}
+              >
+                Land Cover
+              </button>
+              <button
+                className="demo-btn"
+                onClick={() => handleSetDemo('Detect water bodies and estimate area', 'auto')}
+              >
+                Water Detection
+              </button>
+              <button
+                className="demo-btn"
+                onClick={() => handleSetDemo('Highlight urban/built-up regions', 'auto')}
+              >
+                Urban Areas
+              </button>
+              <button
+                className="demo-btn"
+                onClick={() => handleSetDemo('What has changed between these two dates?', 'temporal')}
+              >
+                Change Analysis
+              </button>
+              <button
+                className="demo-btn"
+                onClick={() => handleSetDemo('Compare SAR and optical modalities', 'cross_modal')}
+              >
+                Cross-Modal
+              </button>
+              <button
+                className="demo-btn"
+                onClick={() => handleSetDemo('Show vegetation health using NDVI', 'auto')}
+              >
+                NDVI Vegetation
+              </button>
+            </div>
+
+            {recentRuns.length > 0 && (
+              <div className="recent-runs-section">
+                <div className="section-subtitle">// RECENT RUNS</div>
+                <div className="recent-runs-list">
+                  {recentRuns.map((r) => (
+                    <div className="recent-run-item" key={r.run_id} onClick={() => loadRun(r.run_id)}>
+                      <span className="run-id-text">{r.run_id.slice(0, 16)} · {r.status}</span>
+                      <span className="run-query-text">{(r.query || '').slice(0, 25)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Right Column: Workflow & Results */}
+        <div className="grid-column right-column">
+          <div className="panel results-panel">
+            <div className="panel-header">
+              <span className="panel-title">// COCKPIT MONITOR & RESULTS</span>
+              {runData && (
+                <span className={`panel-badge ${runData.status === 'executing' ? 'active-pulse' : ''}`}>
+                  {runData.status ? runData.status.toUpperCase() : 'IDLE'}
+                </span>
+              )}
+            </div>
+
+            {!runData ? (
+              <div className="results-placeholder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+                <p>Upload satellite images and execute query to view analysis workflow and results.</p>
+              </div>
+            ) : (
+              <div className="dashboard-results-container">
+                {/* Status Bar */}
+                <div className="run-status-bar">
+                  <span className={`status-badge ${runData.status || 'unknown'}`}>{runData.status}</span>
+                  <div className="progress-bar-container">
+                    <div
+                      className="progress-bar-fill"
+                      style={{ width: `${runData.status === 'completed' ? 100 : (runData.progress || 0) * 100}%` }}
+                    ></div>
+                  </div>
+                  <span className="run-id-label">{runData.run_id}</span>
+                </div>
+
+                {/* Answer Card */}
+                {runData.answer ? (
+                  <div className="answer-section">
+                    <div className="section-subtitle">// ANSWER</div>
+                    <div className="answer-card-content">{runData.answer}</div>
+
+                    {runData.confidence != null && (
+                      <div className="confidence-meter-row">
+                        <span className="confidence-val">
+                          {Math.round(runData.confidence * 100)}% CONFIDENCE
+                        </span>
+                        <div className="confidence-track">
+                          <div
+                            className="confidence-fill"
+                            style={{
+                              width: `${runData.confidence * 100}%`,
+                              backgroundColor:
+                                runData.confidence > 0.7
+                                  ? 'var(--green)'
+                                  : runData.confidence > 0.5
+                                  ? 'var(--yellow)'
+                                  : 'var(--red)'
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : runData.current_step ? (
+                  <div className="answer-card-content step-loading">
+                    {runData.current_step}...
+                  </div>
+                ) : null}
+
+                {/* Evidence List */}
+                {runData.evidence && runData.evidence.length > 0 && (
+                  <div className="evidence-section">
+                    <div className="section-subtitle">// EVIDENCE ({runData.evidence.length})</div>
+                    <div className="evidence-list">
+                      {runData.evidence.map((item, idx) => (
+                        <div key={idx} className="evidence-item-box">
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Visual Outputs */}
+                {runData.visual_outputs && runData.visual_outputs.length > 0 && (
+                  <div className="visuals-section">
+                    <div className="section-subtitle">// VISUAL OUTPUTS</div>
+                    <div className="visuals-grid">
+                      {runData.visual_outputs.map((v, idx) => {
+                        const imgUrl = v.url.startsWith('/')
+                          ? v.url
+                          : `/files/${runData.run_id}/${v.url.replace(/\\/g, '/')}`;
+                        return (
+                          <div key={idx} className="visual-card">
+                            <img
+                              src={imgUrl}
+                              alt={v.label || v.type}
+                              onError={(e) => (e.currentTarget.style.display = 'none')}
+                              loading="lazy"
+                            />
+                            <div className="visual-card-label">{v.label || v.type}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Execution Trace & Timeline */}
+                {runData.trace && (runData.trace.tool_logs?.length > 0 || runData.trace.parallel_groups?.length > 0) && (
+                  <div className="trace-section">
+                    <div className="section-subtitle">// EXECUTION TRACE</div>
+                    {runData.trace.parallel_groups?.length > 0 && (
+                      <div className="trace-groups">
+                        {runData.trace.parallel_groups.map((group, gIdx) => (
+                          <div key={gIdx} className="trace-group-row">
+                            <span className="trace-group-tag">G{gIdx + 1}</span>
+                            {group.map((toolName, tIdx) => {
+                              const log = (runData.trace.tool_logs || []).find((l) => l.tool === toolName) || {};
+                              const status = log.status || 'running';
+                              return (
+                                <span key={tIdx} className={`tool-chip ${status}`}>
+                                  {toolName}
+                                  {log.runtime_ms ? <span className="ms">{log.runtime_ms}ms</span> : null}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {runData.trace.tool_logs?.length > 0 && (
+                      <div className="timeline-container">
+                        {(() => {
+                          const maxMs = Math.max(
+                            ...runData.trace.tool_logs.map((l) => l.runtime_ms || 0),
+                            1
+                          );
+                          return runData.trace.tool_logs.map((log, lIdx) => {
+                            const widthPct = Math.max(2, ((log.runtime_ms || 0) / maxMs) * 100);
+                            const barColor =
+                              log.status === 'success'
+                                ? 'var(--green)'
+                                : log.status === 'skipped'
+                                ? 'var(--accent2)'
+                                : 'var(--red)';
+                            return (
+                              <div key={lIdx} className="timeline-row">
+                                <span className="timeline-name">{log.tool}</span>
+                                <div className="timeline-bar-bg">
+                                  <div
+                                    className="timeline-bar"
+                                    style={{ width: `${widthPct}%`, backgroundColor: barColor }}
+                                  ></div>
+                                </div>
+                                <span className="timeline-ms">{log.runtime_ms || 0}ms</span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Report Buttons */}
+                {runData.status === 'completed' && (
+                  <div className="report-actions-row">
+                    <a
+                      className="report-btn"
+                      href={`${API}/api/runs/${runData.run_id}/report?format=html`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      HTML REPORT
+                    </a>
+                    <a
+                      className="report-btn"
+                      href={`${API}/api/runs/${runData.run_id}/report?format=json`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      JSON REPORT
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

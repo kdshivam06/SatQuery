@@ -7,6 +7,12 @@
     --panel-bg: #0d0d0d;
     --panel-border: #222222;
     --accent-glow: #ffffff;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --accent: #3b82f6;
+    --accent2: #8b5cf6;
 }
 
 * {
@@ -222,13 +228,6 @@ body, html {
     border-style: solid;
     border-color: #444444;
     background-color: rgba(25, 25, 25, 0.7);
-}
-
-.dropzone-icon {
-    width: 2.2rem;
-    height: 2.2rem;
-    margin-bottom: 0.6rem;
-    color: var(--base-200);
 }
 
 .dropzone-text .drop-prompt {
@@ -563,3 +562,440 @@ body, html {
         height: auto;
     }
 }
+
+/* ── Dashboard Integration Styles ─────────────────── */
+.header-status-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.status-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.7rem;
+    background-color: #141414;
+    color: var(--base-200);
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid var(--panel-border);
+}
+
+.grid-column {
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.selected-files-list {
+    margin-top: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.selected-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.72rem;
+}
+
+.remove-file-btn {
+    cursor: pointer;
+    color: var(--red);
+    font-weight: 700;
+    margin-left: 0.5rem;
+}
+
+.mode-selector-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.mode-btn {
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    color: var(--base-200);
+    padding: 0.35rem 0.65rem;
+    border-radius: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mode-btn:hover {
+    border-color: var(--base-100);
+    color: var(--base-100);
+}
+
+.mode-btn.active {
+    background-color: var(--base-100);
+    color: var(--base-300);
+    border-color: var(--base-100);
+}
+
+.demo-runs-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+}
+
+.demo-btn {
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    color: var(--base-200);
+    padding: 0.45rem 0.6rem;
+    border-radius: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+}
+
+.demo-btn:hover {
+    border-color: var(--base-100);
+    color: var(--base-100);
+    background-color: #1a1a1a;
+}
+
+.recent-runs-section {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--panel-border);
+}
+
+.section-subtitle {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--base-200);
+    letter-spacing: 0.05em;
+    margin-bottom: 0.4rem;
+}
+
+.recent-runs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.recent-run-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.recent-run-item:hover {
+    border-color: var(--base-100);
+}
+
+.run-id-text {
+    color: var(--base-100);
+    font-weight: 600;
+}
+
+.run-query-text {
+    color: var(--base-200);
+    font-size: 0.62rem;
+}
+
+/* Right Panel Results & Monitoring */
+.dashboard-results-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.run-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+}
+
+.status-badge {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+}
+
+.status-badge.queued { background: #1e293b; color: var(--base-200); }
+.status-badge.routing, .status-badge.ingesting { background: #1e1b4b; color: var(--accent2); }
+.status-badge.executing { background: #172554; color: var(--cyan); }
+.status-badge.completed { background: #052e16; color: var(--green); }
+.status-badge.failed { background: #450a0a; color: var(--red); }
+
+.progress-bar-container {
+    flex: 1;
+    height: 6px;
+    background-color: #222222;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.4s ease;
+}
+
+.run-id-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+    color: var(--base-200);
+}
+
+.answer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.answer-card-content {
+    background-color: #141414;
+    border-left: 3px solid var(--base-100);
+    border-top: 1px solid var(--panel-border);
+    border-right: 1px solid var(--panel-border);
+    border-bottom: 1px solid var(--panel-border);
+    border-radius: 0 6px 6px 0;
+    padding: 0.85rem 1rem;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--base-100);
+}
+
+.answer-card-content.step-loading {
+    border-left-color: var(--cyan);
+    color: var(--base-200);
+}
+
+.confidence-meter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.3rem;
+}
+
+.confidence-val {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--base-100);
+}
+
+.confidence-track {
+    flex: 1;
+    height: 6px;
+    background-color: #222222;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.confidence-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.evidence-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.evidence-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.evidence-item-box {
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 0.45rem 0.65rem;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: var(--base-200);
+}
+
+.visuals-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.visuals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.6rem;
+}
+
+.visual-card {
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.visual-card img {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    display: block;
+}
+
+.visual-card-label {
+    padding: 0.35rem 0.5rem;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+    color: var(--base-200);
+}
+
+.trace-section {
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.trace-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.trace-group-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.trace-group-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.62rem;
+    color: var(--base-200);
+    font-weight: 700;
+    width: 28px;
+}
+
+.tool-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+    border: 1px solid var(--panel-border);
+}
+
+.tool-chip.success { background: rgba(5, 46, 22, 0.6); color: var(--green); border-color: #166534; }
+.tool-chip.skipped { background: rgba(30, 27, 75, 0.6); color: var(--accent2); border-color: #4338ca; }
+.tool-chip.failed { background: rgba(69, 10, 10, 0.6); color: var(--red); border-color: #991b1b; }
+.tool-chip.running { background: rgba(23, 37, 84, 0.6); color: var(--cyan); border-color: #1e40af; }
+.tool-chip .ms { font-size: 0.58rem; opacity: 0.8; }
+
+.timeline-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.4rem;
+}
+
+.timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.65rem;
+}
+
+.timeline-name {
+    width: 130px;
+    text-align: right;
+    color: var(--base-200);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.timeline-bar-bg {
+    flex: 1;
+    height: 6px;
+    background-color: #222222;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.timeline-bar {
+    height: 100%;
+    border-radius: 3px;
+}
+
+.timeline-ms {
+    width: 45px;
+    font-size: 0.6rem;
+    color: var(--base-200);
+    text-align: right;
+}
+
+.report-actions-row {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.4rem;
+}
+
+.report-btn {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68rem;
+    color: var(--base-100);
+    background-color: #141414;
+    border: 1px solid var(--panel-border);
+    padding: 0.45rem 0.8rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.report-btn:hover {
+    border-color: var(--base-100);
+    background-color: #1f1f1f;
+}
+
