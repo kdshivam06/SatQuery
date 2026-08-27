@@ -52,6 +52,9 @@ class GeoChatTool(BaseTool):
         if GEOCHAT_ENDPOINT:
             return await self._call_endpoint(GEOCHAT_ENDPOINT, preview, query)
 
+        if os.getenv("HF_TOKEN"):
+            return await self._call_serverless(preview, query)
+
         # No endpoint configured — return informative skip
         return skipped_result(
             self.name,
@@ -60,6 +63,18 @@ class GeoChatTool(BaseTool):
             run_mode=self.run_mode,
             resource_lane=self.resource_lane,
         )
+
+    async def _call_serverless(self, image_path: str, query: str) -> dict:
+        try:
+            from backend.tools.hf_serverless import call_hf_vlm
+            answer = await call_hf_vlm(GEOCHAT_MODEL_ID, [image_path], query)
+            return {
+                "status": "success", "run_mode": self.run_mode, "resource_lane": self.resource_lane,
+                "outputs": {"answer": answer, "source": f"hf_serverless:{GEOCHAT_MODEL_ID}"},
+                "confidence": 0.75, "summary": f"GeoChat: {answer[:200]}", "artifacts": [],
+            }
+        except Exception as exc:
+            return skipped_result(self.name, f"GeoChat serverless inference failed: {exc}", run_mode=self.run_mode, resource_lane=self.resource_lane)
 
     async def _call_space(self, space_id: str, image_path: str, query: str) -> dict:
         """Call a Gradio Space for GeoChat inference."""

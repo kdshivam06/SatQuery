@@ -17,6 +17,8 @@ def fuse_results(
     """
 
     final_confidence = calculate_final_confidence(tool_results)
+    if _vlm_was_skipped(tool_results):
+        final_confidence = min(final_confidence, 0.5)
     evidence = _build_evidence_list(tool_results)
     visual_outputs = _collect_visual_outputs(tool_results)
     answer = _synthesise_answer(query, tool_results, workflow, evidence, final_confidence)
@@ -27,6 +29,19 @@ def fuse_results(
         "evidence": evidence,
         "visual_outputs": visual_outputs,
     }
+
+
+def _vlm_was_skipped(tool_results: dict[str, dict]) -> bool:
+    """Prevent static preprocessing from masking an unavailable VLM."""
+    vlm_names = {
+        "geochat_vqa_caption_tool",
+        "rsllava_vqa_caption_tool",
+        "teochat_change_vqa_tool",
+    }
+    return any(
+        name in vlm_names and result.get("status") == "skipped"
+        for name, result in tool_results.items()
+    )
 
 
 # ── Evidence list ─────────────────────────────────────────
@@ -80,8 +95,8 @@ def _synthesise_answer(
 
     parts = []
 
-    # VLM answers (GeoChat, TEOChat)
-    for vlm_tool in ("geochat_vqa_caption_tool", "teochat_change_vqa_tool"):
+    # VLM answers (GeoChat, RS-LLaVA, TEOChat)
+    for vlm_tool in ("geochat_vqa_caption_tool", "rsllava_vqa_caption_tool", "teochat_change_vqa_tool"):
         result = tool_results.get(vlm_tool, {})
         if result.get("status") == "success":
             answer = result.get("outputs", {}).get("answer", "")
@@ -135,9 +150,16 @@ def _synthesise_answer(
 
     # Build final answer
     if not parts:
+        vlm_failures = [
+            result.get("reason", "unavailable")
+            for name, result in tool_results.items()
+            if name in {"geochat_vqa_caption_tool", "rsllava_vqa_caption_tool", "teochat_change_vqa_tool"}
+            and result.get("status") == "skipped"
+        ]
+        vlm_status = f"VLM inference was attempted but unavailable: {vlm_failures[0]}" if vlm_failures else "No VLM tool was selected."
         return (
             f"Analysis complete (workflow: {workflow}). "
-            f"No VLM endpoints are configured, but deterministic geospatial tools "
+            f"{vlm_status} Deterministic geospatial tools "
             f"produced evidence with {confidence:.0%} overall confidence. "
             f"See the visual outputs and tool trace for detailed results."
         )

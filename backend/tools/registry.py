@@ -21,6 +21,7 @@ from backend.tools.overlay_tool import OverlayGeneratorTool
 from backend.tools.custom_dual_encoder_tool import CustomDualEncoderTool
 from backend.tools.croma_tool import CROMATool
 from backend.tools.remoteclip_tool import RemoteCLIPTool
+from backend.tools.rsllava_tool import RSLLavaTool
 from backend.tools.geochat_tool import GeoChatTool
 from backend.tools.teochat_tool import TEOChatTool
 from backend.tools.segearth_tool import SegEarthTool
@@ -51,6 +52,7 @@ TOOL_REGISTRY: dict[str, object] = {
 
     # Remote HF API tools
     "geochat_vqa_caption_tool": GeoChatTool(),
+    "rsllava_vqa_caption_tool": RSLLavaTool(),
     "teochat_change_vqa_tool": TEOChatTool(),
     "segearth_text_guided_segmentation_tool": SegEarthTool(),
     "sarclip_sar_text_tool": SARCLIPTool(),

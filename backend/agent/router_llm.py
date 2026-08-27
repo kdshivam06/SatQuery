@@ -31,7 +31,7 @@ Rules:
 3. Prefer static geospatial function tools for measurable evidence when applicable.
 4. Use the custom SAR-optical dual encoder as the primary cross-modal tool for SAR-optical pair matching, pair validation, and similarity confidence.
 5. Use CROMA as an additional SAR-optical feature tool when the input is a SAR-optical pair and local GPU light resources are available.
-6. Use GeoChat for single-image VQA, captioning, scene description, and optical semantic reasoning.
+6. Use RS-LLaVA for single-image remote-sensing VQA, captioning, scene description, and optical semantic reasoning.
 7. Use TEOChat for bi-temporal change VQA or change description.
 8. Use SegEarth-OV only when text-guided segmentation or masks are explicitly required and the endpoint is enabled.
 9. Use SARCLIP only for SAR image-text inference or zero-shot SAR classification. Do not use SARCLIP for primary SAR-optical retrieval.

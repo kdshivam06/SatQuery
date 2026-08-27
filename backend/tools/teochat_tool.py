@@ -40,6 +40,9 @@ class TEOChatTool(BaseTool):
         if TEOCHAT_ENDPOINT:
             return await self._call_endpoint(TEOCHAT_ENDPOINT, previews[0], previews[1], query)
 
+        if os.getenv("HF_TOKEN"):
+            return await self._call_serverless(previews, query)
+
         return skipped_result(
             self.name,
             "TEOChat endpoint not configured. Set TEOCHAT_SPACE_ID or TEOCHAT_ENDPOINT in .env. "
@@ -47,6 +50,18 @@ class TEOChatTool(BaseTool):
             run_mode=self.run_mode,
             resource_lane=self.resource_lane,
         )
+
+    async def _call_serverless(self, previews: list[str], query: str) -> dict:
+        try:
+            from backend.tools.hf_serverless import call_hf_vlm
+            answer = await call_hf_vlm(os.getenv("TEOCHAT_MODEL_ID", "jirvin16/TEOChat"), previews[:2], query)
+            return {
+                "status": "success", "run_mode": self.run_mode, "resource_lane": self.resource_lane,
+                "outputs": {"answer": answer, "change_description": answer, "source": "hf_serverless"},
+                "confidence": 0.75, "summary": f"TEOChat: {answer[:200]}", "artifacts": [],
+            }
+        except Exception as exc:
+            return skipped_result(self.name, f"TEOChat serverless inference failed: {exc}", run_mode=self.run_mode, resource_lane=self.resource_lane)
 
     async def _call_space(self, space_id: str, img1: str, img2: str, query: str) -> dict:
         try:

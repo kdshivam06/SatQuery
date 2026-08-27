@@ -8,7 +8,11 @@ from .alignment_checker import check_alignment
 from .dependencies import MissingDependencyError
 from .exporter import create_pdf_report, write_ingest_manifest, write_metadata_json
 from .metadata_extractor import read_asset_metadata
-from .model_input_builder import build_combined_s1_s2_model_input, build_patch_model_input
+from .model_input_builder import (
+    build_combined_s1_s2_model_input,
+    build_patch_model_input,
+    build_raster_model_input,
+)
 from .modality_detector import detect_modality
 from .models import AssetFormat, IngestedAsset, Modality
 from .preview_generator import generate_preview
@@ -44,16 +48,25 @@ def ingest_asset(
     if write_metadata:
         write_metadata_json(metadata, out_dir / "metadata" / f"{p.stem}.json")
 
-    if generate_model_input and metadata.format == AssetFormat.PATCH_FOLDER:
+    if generate_model_input:
         sensor = _sensor_from_modality(modality.modality)
         if sensor:
             try:
-                model_input = build_patch_model_input(
-                    p,
-                    out_dir / "model_inputs" / f"{p.stem}_{sensor}_{model_version}.npy",
-                    sensor=sensor,
-                    model_version=model_version,
-                )
+                if metadata.format == AssetFormat.PATCH_FOLDER:
+                    model_input = build_patch_model_input(
+                        p,
+                        out_dir / "model_inputs" / f"{p.stem}_{sensor}_{model_version}.npy",
+                        sensor=sensor,
+                        model_version=model_version,
+                    )
+                elif metadata.format in (AssetFormat.GEOTIFF, AssetFormat.TIFF):
+                    model_input = build_raster_model_input(
+                        p,
+                        out_dir / "model_inputs" / f"{p.stem}_{sensor}_{model_version}.npy",
+                        sensor=sensor,
+                        modality=modality.modality.value,
+                        model_version=model_version,
+                    )
             except (MissingDependencyError, ValueError) as exc:
                 errors.append(str(exc))
 

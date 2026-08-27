@@ -6,6 +6,8 @@ when ROUTER_MODE=fallback, or as safety net when the LLM router fails.
 
 from __future__ import annotations
 
+import os
+
 from backend.agent.planner_schema import ExecutionPlan, ExecutionStep, ParallelGroup, SkippedTool
 from backend.tools.registry import TOOL_REGISTRY
 
@@ -66,9 +68,19 @@ def _preprocess_group(available: set[str]) -> ParallelGroup:
 def _vqa_plan(available: set[str], skipped: list) -> list[ParallelGroup]:
     groups = [_preprocess_group(available)]
     specialist_steps = []
-    if "geochat_vqa_caption_tool" in available:
+    geochat_configured = bool(
+        os.getenv("GEOCHAT_SPACE_ID")
+        or os.getenv("GEOCHAT_ENDPOINT")
+        or os.getenv("HF_TOKEN")
+    )
+    if "geochat_vqa_caption_tool" in available and geochat_configured:
         specialist_steps.append(ExecutionStep(
             step_id="geochat_vqa", tool="geochat_vqa_caption_tool",
+            depends_on=["preview_generator"], resource_lane="remote_api",
+        ))
+    elif "rsllava_vqa_caption_tool" in available:
+        specialist_steps.append(ExecutionStep(
+            step_id="rsllava_vqa", tool="rsllava_vqa_caption_tool",
             depends_on=["preview_generator"], resource_lane="remote_api",
         ))
     if "custom_sar_optical_dual_encoder_tool" in available:
@@ -119,6 +131,11 @@ def _grounding_plan(available: set[str], modalities: list, bands: dict, skipped:
 
 def _cross_modal_plan(available: set[str], modalities: list, bands: dict, skipped: list) -> list[ParallelGroup]:
     groups = [_preprocess_group(available)]
+    geochat_configured = bool(
+        os.getenv("GEOCHAT_SPACE_ID")
+        or os.getenv("GEOCHAT_ENDPOINT")
+        or os.getenv("HF_TOKEN")
+    )
 
     # Validation
     val_steps = []
@@ -131,8 +148,13 @@ def _cross_modal_plan(available: set[str], modalities: list, bands: dict, skippe
         specialist_steps.append(ExecutionStep(step_id="dual_encoder", tool="custom_sar_optical_dual_encoder_tool", depends_on=["metadata_reader"], resource_lane="local_gpu_light"))
     if "croma_cross_modal_feature_tool" in available:
         specialist_steps.append(ExecutionStep(step_id="croma", tool="croma_cross_modal_feature_tool", depends_on=["metadata_reader"], resource_lane="local_gpu_light"))
-    if "geochat_vqa_caption_tool" in available:
-        specialist_steps.append(ExecutionStep(step_id="geochat_vqa", tool="geochat_vqa_caption_tool", depends_on=["preview_generator"], resource_lane="remote_api"))
+    if "geochat_vqa_caption_tool" in available and geochat_configured:
+        specialist_steps.append(ExecutionStep(
+            step_id="geochat_vqa", tool="geochat_vqa_caption_tool",
+            depends_on=["preview_generator"], resource_lane="remote_api",
+        ))
+    elif "rsllava_vqa_caption_tool" in available:
+        specialist_steps.append(ExecutionStep(step_id="rsllava_vqa", tool="rsllava_vqa_caption_tool", depends_on=["preview_generator"], resource_lane="remote_api"))
 
     # Static evidence
     evidence_steps = []
