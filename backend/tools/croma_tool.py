@@ -12,7 +12,7 @@ from backend.tools.base_tool import BaseTool, skipped_result
 from backend.tools.utils import find_asset, get_model_input_path
 
 
-CROMA_MODEL_PATH = os.getenv("CROMA_MODEL_PATH", "backend/models/croma/CROMA_base.pt")
+CROMA_MODEL_PATH = os.getenv("CROMA_MODEL_PATH", "backend\models\CROMA_base.pt")
 CROMA_ENABLED = os.getenv("CROMA_ENABLED", "true").lower() == "true"
 
 

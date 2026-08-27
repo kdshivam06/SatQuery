@@ -12,7 +12,7 @@ from backend.tools.base_tool import BaseTool, skipped_result
 from backend.tools.utils import find_asset, get_preview_path
 
 
-REMOTECLIP_MODEL_PATH = os.getenv("REMOTECLIP_MODEL_PATH", "backend/models/remoteclip/RemoteCLIP-ViT-B-32.pt")
+REMOTECLIP_MODEL_PATH = os.getenv("REMOTECLIP_MODEL_PATH", "backend/models/RemoteCLIP-ViT-B-32.pt")
 REMOTECLIP_ENABLED = os.getenv("REMOTECLIP_ENABLED", "true").lower() == "true"
 
 
