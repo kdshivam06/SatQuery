@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import HollowGlobe from '../components/HollowGlobe';
 import '../styles/hero.css';
 
 const API = '';
@@ -161,8 +162,13 @@ const Hero = ({ isPreloaded = true }) => {
     <div className={`hero ${!isPreloaded ? 'hero-revealed' : ''}`}>
       <div className="preloader-revealer"></div>
 
-      {/* Top Header Navigation */}
-      <header className="hero-header">
+      {/* HollowGlobe background container positioned on the right edge */}
+      <div className="globe-right-container">
+        <HollowGlobe />
+      </div>
+
+      {/* Sticky Top Header Navigation */}
+      <header className="hero-header sticky-header">
         <div className="hero-title">
           <div className="hero-title-line">
             <span className="hero-title-word">SATQUERY</span>
@@ -190,12 +196,11 @@ const Hero = ({ isPreloaded = true }) => {
         </nav>
       </header>
 
-      {/* 2-Column Dashboard Grid */}
-      <div className="hero-viewport-grid">
-        {/* Left Column: Input & Controls */}
-        <div className="grid-column left-column">
+      {/* Main Scrollable Content Container (Left Side Placement) */}
+      <div className="hero-dashboard-content">
+        <div className="left-side-containers">
           {/* Upload Panel */}
-          <div className="panel dropzone-panel">
+          <div className="panel dropzone-panel" id="workspace">
             <div className="panel-header">
               <span className="panel-title">// UPLOAD IMAGES</span>
               <span className="panel-badge">GEOTIFF / PATCHES</span>
@@ -280,7 +285,7 @@ const Hero = ({ isPreloaded = true }) => {
           </div>
 
           {/* Demo Scenarios & Recent Runs */}
-          <div className="panel demo-runs-panel">
+          <div className="panel demo-runs-panel" id="guide">
             <div className="panel-header">
               <span className="panel-title">// DEMO SCENARIOS</span>
             </div>
@@ -324,7 +329,7 @@ const Hero = ({ isPreloaded = true }) => {
             </div>
 
             {recentRuns.length > 0 && (
-              <div className="recent-runs-section">
+              <div className="recent-runs-section" id="logs">
                 <div className="section-subtitle">// RECENT RUNS</div>
                 <div className="recent-runs-list">
                   {recentRuns.map((r) => (
@@ -337,10 +342,8 @@ const Hero = ({ isPreloaded = true }) => {
               </div>
             )}
           </div>
-        </div>
 
-        {/* Right Column: Workflow & Results */}
-        <div className="grid-column right-column">
+          {/* Workflow Cockpit Monitor & Results Panel */}
           <div className="panel results-panel">
             <div className="panel-header">
               <span className="panel-title">// COCKPIT MONITOR & RESULTS</span>
