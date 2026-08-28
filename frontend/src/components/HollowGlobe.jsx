@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import Globe from 'globe.gl';
 import { MeshLambertMaterial, DoubleSide } from 'three';
 import * as topojson from 'topojson-client';
+import landTopo from 'world-atlas/land-110m.json';
 
 const HollowGlobe = () => {
   const globeContainerRef = useRef(null);
@@ -17,18 +18,13 @@ const HollowGlobe = () => {
       .showGlobe(false)
       .showAtmosphere(false);
 
-    // Fetch and process the topojson data
-    fetch('//cdn.jsdelivr.net/npm/world-atlas/land-110m.json')
-      .then(res => res.json())
-      .then(landTopo => {
-        globeInstance.current
-          .polygonsData(topojson.feature(landTopo, landTopo.objects.land).features)
-          .polygonCapMaterial(
-            new MeshLambertMaterial({ color: 'darkslategrey', side: DoubleSide })
-          )
-          .polygonSideColor(() => 'rgba(0,0,0,0)');
-      })
-      .catch(err => console.error("Error loading globe data:", err));
+    const land = topojson.feature(landTopo, landTopo.objects.land);
+    globeInstance.current
+      .polygonsData(land.features)
+      .polygonCapMaterial(
+        new MeshLambertMaterial({ color: 'darkslategrey', side: DoubleSide })
+      )
+      .polygonSideColor(() => 'rgba(0,0,0,0)');
 
     // Cleanup function on unmount
     return () => {

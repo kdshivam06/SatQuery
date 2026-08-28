@@ -2,7 +2,38 @@ import React, { useState, useEffect, useRef } from 'react';
 import HollowGlobe from '../components/HollowGlobe';
 import '../styles/hero.css';
 
-const API = '';
+const API =
+  import.meta.env.VITE_API_BASE ||
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://127.0.0.1:8000'
+    : '');
+
+const apiPath = (path) => `${API}${path}`;
+
+const resolveVisualUrl = (runId, rawUrl = '') => {
+  if (!rawUrl) return '';
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+  const cleaned = rawUrl.replace(/\\/g, '/');
+  if (cleaned.startsWith('/api/') || cleaned.startsWith('/files/')) {
+    return apiPath(cleaned);
+  }
+
+  let relative = cleaned.replace(/^\/+/, '');
+  const lower = relative.toLowerCase();
+  const fullMarker = `runs/api/${runId.toLowerCase()}/`;
+  const fullMarkerIndex = lower.indexOf(fullMarker);
+  if (fullMarkerIndex >= 0) {
+    relative = relative.slice(fullMarkerIndex + fullMarker.length);
+  } else {
+    const runMarker = `${runId.toLowerCase()}/`;
+    const runMarkerIndex = lower.indexOf(runMarker);
+    if (runMarkerIndex >= 0) {
+      relative = relative.slice(runMarkerIndex + runMarker.length);
+    }
+  }
+
+  return apiPath(`/files/${runId}/${relative.replace(/^\/+/, '')}`);
+};
 
 const Hero = ({ isPreloaded = true }) => {
   // State
@@ -26,7 +57,7 @@ const Hero = ({ isPreloaded = true }) => {
 
   // 1. Health check
   const fetchHealth = () => {
-    fetch(`${API}/health`)
+    fetch(apiPath('/health'))
       .then((r) => r.json())
       .then((d) => {
         setHealth({
@@ -48,7 +79,7 @@ const Hero = ({ isPreloaded = true }) => {
 
   // 2. Fetch Recent Runs
   const fetchRecentRuns = () => {
-    fetch(`${API}/api/runs?limit=5`)
+    fetch(apiPath('/api/runs?limit=5'))
       .then((r) => r.json())
       .then((d) => {
         setRecentRuns(d.runs || []);
@@ -68,7 +99,7 @@ const Hero = ({ isPreloaded = true }) => {
   // Polling logic
   const pollRun = async (runId) => {
     try {
-      const res = await fetch(`${API}/api/runs/${runId}`);
+      const res = await fetch(apiPath(`/api/runs/${runId}`));
       const data = await res.json();
       setRunData(data);
       if (data.status === 'completed' || data.status === 'failed') {
@@ -94,7 +125,7 @@ const Hero = ({ isPreloaded = true }) => {
   const loadRun = async (runId) => {
     setCurrentRunId(runId);
     try {
-      const res = await fetch(`${API}/api/runs/${runId}`);
+      const res = await fetch(apiPath(`/api/runs/${runId}`));
       const data = await res.json();
       setRunData(data);
       if (data.status !== 'completed' && data.status !== 'failed') {
@@ -141,7 +172,7 @@ const Hero = ({ isPreloaded = true }) => {
     selectedFiles.forEach((f) => fd.append('files', f));
 
     try {
-      const res = await fetch(`${API}/api/analyze`, { method: 'POST', body: fd });
+      const res = await fetch(apiPath('/api/analyze'), { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Analysis failed');
       setIsSubmitting(false);
@@ -430,9 +461,7 @@ const Hero = ({ isPreloaded = true }) => {
                     <div className="section-subtitle">// VISUAL OUTPUTS</div>
                     <div className="visuals-grid">
                       {runData.visual_outputs.map((v, idx) => {
-                        const imgUrl = v.url.startsWith('/')
-                          ? v.url
-                          : `/files/${runData.run_id}/${v.url.replace(/\\/g, '/')}`;
+                        const imgUrl = resolveVisualUrl(runData.run_id, v.url);
                         return (
                           <div key={idx} className="visual-card">
                             <img
@@ -512,7 +541,7 @@ const Hero = ({ isPreloaded = true }) => {
                   <div className="report-actions-row">
                     <a
                       className="report-btn"
-                      href={`${API}/api/runs/${runData.run_id}/report?format=html`}
+                      href={apiPath(`/api/runs/${runData.run_id}/report?format=html`)}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -520,7 +549,7 @@ const Hero = ({ isPreloaded = true }) => {
                     </a>
                     <a
                       className="report-btn"
-                      href={`${API}/api/runs/${runData.run_id}/report?format=json`}
+                      href={apiPath(`/api/runs/${runData.run_id}/report?format=json`)}
                       target="_blank"
                       rel="noreferrer"
                     >
