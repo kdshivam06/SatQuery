@@ -37,7 +37,9 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(state["status"], "completed")
-        self.assertIn("SAR and multispectral", state["answer"])
+        self.assertIn("NDWI WATER", state["answer"])
+        self.assertIn("NDBI BUILTUP", state["answer"])
+        self.assertIn("SAR WATER", state["answer"])
         self.assertGreater(state["confidence"], 0.0)
         self.assertTrue(state["visual_outputs"])
         self.assertTrue(state["trace"])

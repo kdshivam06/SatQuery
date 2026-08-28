@@ -46,20 +46,15 @@ class GeoChatTool(BaseTool):
 
         query = params.get("prompt", context.get("query", "Describe this remote sensing image."))
 
-        # Try Space first, then endpoint, then skip
-        if GEOCHAT_SPACE_ID:
-            return await self._call_space(GEOCHAT_SPACE_ID, preview, query)
-        if GEOCHAT_ENDPOINT:
-            return await self._call_endpoint(GEOCHAT_ENDPOINT, preview, query)
-
-        if os.getenv("HF_TOKEN"):
+        # Use HF Serverless Inference API (free, just needs HF_TOKEN)
+        hf_token = os.getenv("HF_TOKEN", "")
+        if hf_token:
             return await self._call_serverless(preview, query)
 
-        # No endpoint configured — return informative skip
+        # No token at all — skip
         return skipped_result(
             self.name,
-            "GeoChat endpoint not configured. Set GEOCHAT_SPACE_ID or GEOCHAT_ENDPOINT in .env to enable. "
-            "The system will use deterministic geospatial tools for evidence.",
+            "HF_TOKEN not configured. Set HF_TOKEN in .env to enable VLM inference via the free HF Inference API.",
             run_mode=self.run_mode,
             resource_lane=self.resource_lane,
         )
