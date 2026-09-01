@@ -68,19 +68,21 @@ def route(router_input: dict) -> ExecutionPlan:
         return fallback_route(router_input)
 
     if ROUTER_MODE in ("llm", "llm_with_fallback"):
+        llm_error = "Unknown Error"
         try:
             plan = _llm_route(router_input)
             if plan:
                 logger.info("LLM router produced a valid execution plan.")
                 return plan
         except Exception as exc:
+            llm_error = str(exc)
             logger.warning("LLM router failed: %s. Falling back to deterministic router.", exc)
 
         if ROUTER_MODE == "llm_with_fallback":
             logger.info("Falling back to deterministic router.")
             return fallback_route(router_input)
 
-        raise RuntimeError("LLM router failed and no fallback is configured (ROUTER_MODE=llm).")
+        raise RuntimeError(f"LLM router failed and no fallback is configured (ROUTER_MODE=llm). Details: {llm_error}")
 
     logger.info("Unknown ROUTER_MODE=%s, using fallback.", ROUTER_MODE)
     return fallback_route(router_input)
@@ -91,9 +93,9 @@ def _llm_route(router_input: dict) -> ExecutionPlan | None:
     try:
         from backend.geospatial.dependencies import require_module
         transformers = require_module("transformers", "transformers")
-    except Exception:
+    except Exception as exc:
         logger.warning("transformers not installed; cannot use LLM router.")
-        return None
+        raise ValueError("transformers module not installed") from exc
 
     try:
         tokenizer = transformers.AutoTokenizer.from_pretrained(ROUTER_LLM_MODEL_ID)
@@ -104,7 +106,7 @@ def _llm_route(router_input: dict) -> ExecutionPlan | None:
         )
     except Exception as exc:
         logger.warning("Failed to load LLM model %s: %s", ROUTER_LLM_MODEL_ID, exc)
-        return None
+        raise ValueError(f"Failed to load LLM model: {exc}") from exc
 
     user_message = json.dumps(router_input, indent=2)
     messages = [
@@ -129,14 +131,57 @@ def _llm_route(router_input: dict) -> ExecutionPlan | None:
     # Extract JSON from response
     plan_json = _extract_json(generated)
     if plan_json is None:
-        logger.warning("LLM output did not contain valid JSON.")
-        return None
+        logger.warning("LLM output did not contain valid JSON. Raw output: %s", generated)
+        raise ValueError(f"LLM output did not contain valid JSON. Raw output: {generated}")
+
+    # Normalize the LLM output to fix common structural issues
+    plan_json = _fix_parallel_groups(plan_json)
 
     try:
         return ExecutionPlan.model_validate(plan_json)
     except Exception as exc:
         logger.warning("LLM JSON failed Pydantic validation: %s", exc)
-        return None
+        raise ValueError(f"LLM JSON failed Pydantic validation: {exc}. JSON: {plan_json}") from exc
+
+
+def _fix_parallel_groups(plan_json: dict) -> dict:
+    """Normalize LLM output to fix common structural issues.
+
+    The Qwen model sometimes puts bare step dicts directly in the
+    parallel_groups list instead of wrapping them in proper group objects
+    with group_id, can_run_parallel, and steps fields.
+    """
+    groups = plan_json.get("parallel_groups")
+    if not isinstance(groups, list) or not groups:
+        return plan_json
+
+    fixed_groups = []
+    for i, item in enumerate(groups):
+        if not isinstance(item, dict):
+            continue
+
+        # Already a proper group (has group_id and steps)
+        if "group_id" in item and "steps" in item:
+            fixed_groups.append(item)
+        # Bare step dict (has step_id and tool but no group_id)
+        elif "step_id" in item and "tool" in item:
+            fixed_groups.append({
+                "group_id": f"auto_group_{i}",
+                "can_run_parallel": False,
+                "steps": [item],
+            })
+        else:
+            # Unknown format, keep as-is and let Pydantic handle validation
+            fixed_groups.append(item)
+
+    plan_json["parallel_groups"] = fixed_groups
+
+    # Also fix skipped_tools if it's nested inside the last group
+    if "skipped_tools" not in plan_json or not plan_json["skipped_tools"]:
+        plan_json["skipped_tools"] = []
+
+    logger.debug("Fixed parallel_groups: %d groups after normalization.", len(fixed_groups))
+    return plan_json
 
 
 def _extract_json(text: str) -> dict | None:
