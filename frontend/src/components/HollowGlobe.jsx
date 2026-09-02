@@ -7,6 +7,7 @@ import landTopo from 'world-atlas/land-110m.json';
 const HollowGlobe = () => {
   const globeContainerRef = useRef(null);
   const globeInstance = useRef(null);
+  const animFrameRef = useRef(null);
 
   useEffect(() => {
     // Ensure the container exists and the globe hasn't been initialized yet
@@ -26,18 +27,31 @@ const HollowGlobe = () => {
       )
       .polygonSideColor(() => 'rgba(0,0,0,0)');
 
-    // Cleanup function on unmount
+    // Disable user orbit controls so rotation is purely programmatic
+    globeInstance.current.controls().enabled = false;
+
+    // Auto-rotate: increment longitude each frame (~0.15°/frame = ~9°/sec at 60fps)
+    let lng = 0;
+    const rotate = () => {
+      lng = (lng + 0.15) % 360;
+      globeInstance.current.pointOfView({ lat: 20, lng, altitude: 2 });
+      animFrameRef.current = requestAnimationFrame(rotate);
+    };
+    animFrameRef.current = requestAnimationFrame(rotate);
+
+    // Cleanup on unmount
     return () => {
+      cancelAnimationFrame(animFrameRef.current);
       if (globeContainerRef.current) {
         globeContainerRef.current.innerHTML = '';
       }
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
   return (
-    <div 
-      ref={globeContainerRef} 
-      style={{ margin: 0, width: '100vw', height: '100vh' }} 
+    <div
+      ref={globeContainerRef}
+      style={{ margin: 0, width: '100vw', height: '100vh' }}
     />
   );
 };

@@ -19,6 +19,11 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+    display: none;
 }
 
 body, html {
@@ -41,10 +46,10 @@ body, html {
     flex-direction: column;
     justify-content: flex-start;
     transform: scale(0.75);
+    transform-origin: top center;
     will-change: transform;
     z-index: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: visible;
 }
 
 .hero.hero-revealed {
@@ -76,13 +81,16 @@ body, html {
     position: sticky;
     top: 0;
     z-index: 100;
-    width: 100%;
+    /* Bleed out of parent's 2.5rem padding so bg spans full vw */
+    width: calc(100% + 5rem);
+    margin-left: -2.5rem;
+    margin-right: -2.5rem;
+    padding: 1rem 2.5rem;
+    margin-bottom: 1.25rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
-    padding: 1.5rem 0 1rem 0;
-    margin-bottom: 1.25rem;
     background-color: var(--base-300);
 }
 
@@ -135,12 +143,12 @@ body, html {
 /* HollowGlobe Right Edge Container */
 .globe-right-container {
     position: fixed;
-    right: -25vw;
+    right: -10vw;
     top: 50%;
-    transform: translateY(-50%) scale(1.5); 
-    transform-origin: center right; 
-    width: 58vw;
-    height: 90vh;
+    transform: translateY(-50%) scale(1.55);
+    transform-origin: center right;
+    width: 62vw;
+    height: 100vh;
     pointer-events: none;
     z-index: 1;
 }
@@ -187,7 +195,7 @@ body, html {
 .panel {
     background-color: var(--panel-bg);
     border: 1px solid var(--panel-border);
-    border-radius: 8px;
+    border-radius: 0px;
     padding: 1.15rem;
     display: flex;
     flex-direction: column;
@@ -230,9 +238,13 @@ body, html {
 
 .panel-title {
     font-family: "Geist Mono", monospace;
-    font-size: 0.75rem;
-    color: var(--base-200);
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--base-100);
     text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--base-100);
 }
 
 /* Dropzone Panel */
@@ -263,8 +275,9 @@ body, html {
 
 .dropzone-box.has-file {
     border-style: solid;
-    border-color: #444444;
-    background-color: rgba(25, 25, 25, 0.7);
+    border-color: #2dd4beb3;
+    background-color: rgba(20, 184, 166, 0.12);
+    transition: all 0.3s ease;
 }
 
 .dropzone-text .drop-prompt {
@@ -520,7 +533,7 @@ body, html {
 
 /* Query Input Panel */
 .query-panel {
-    flex: 0.9;
+    flex: 1.6;
 }
 
 .query-input-box {
@@ -533,6 +546,7 @@ body, html {
 .query-textarea {
     width: 100%;
     flex: 1;
+    min-height: 140px;
     background-color: #141414;
     border: 1px solid #282828;
     border-radius: 4px;
