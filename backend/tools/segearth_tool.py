@@ -50,7 +50,11 @@ class SegEarthTool(BaseTool):
                 img_b64 = base64.b64encode(f.read()).decode()
 
             async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.post(SEGEARTH_ENDPOINT, json={"image": img_b64, "text": query})
+                headers = {"Content-Type": "application/json"}
+                hf_token = os.getenv("HF_TOKEN", "")
+                if hf_token:
+                    headers["Authorization"] = f"Bearer {hf_token}"
+                resp = await client.post(SEGEARTH_ENDPOINT, headers=headers, json={"image": img_b64, "text": query})
                 resp.raise_for_status()
                 data = resp.json()
 

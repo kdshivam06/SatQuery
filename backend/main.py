@@ -14,11 +14,11 @@ try:
     from dotenv import load_dotenv
     env_path = Path(__file__).parent / ".env"
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
     else:
         alt = Path(__file__).parent.parent / ".env"
         if alt.exists():
-            load_dotenv(alt)
+            load_dotenv(alt, override=True)
 except ImportError:
     pass
 

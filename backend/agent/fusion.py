@@ -95,8 +95,8 @@ def _synthesise_answer(
 
     parts = []
 
-    # VLM answers (GeoChat, RS-LLaVA, TEOChat)
-    for vlm_tool in ("geochat_vqa_caption_tool", "rsllava_vqa_caption_tool", "teochat_change_vqa_tool"):
+    # VLM answers (GeoChat, RS-LLaVA, TEOChat, SARCLIP)
+    for vlm_tool in ("geochat_vqa_caption_tool", "rsllava_vqa_caption_tool", "teochat_change_vqa_tool", "sarclip_sar_text_tool"):
         result = tool_results.get(vlm_tool, {})
         if result.get("status") == "success":
             answer = result.get("outputs", {}).get("answer", "")

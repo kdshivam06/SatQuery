@@ -1,4 +1,4 @@
-"""LLM-based router – uses Qwen3 or similar to produce strict JSON execution plans.
+"""LLM-based router – uses HF Inference API (free) for smart JSON routing.
 
 Falls back to the deterministic router on parse failure.
 """
@@ -15,7 +15,8 @@ from backend.agent.planner_schema import ExecutionPlan
 logger = logging.getLogger(__name__)
 
 ROUTER_MODE = os.getenv("ROUTER_MODE", "fallback")
-ROUTER_LLM_MODEL_ID = os.getenv("ROUTER_LLM_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct")
+# Remote model for routing (free via HF Inference API — no local GPU needed)
+ROUTER_LLM_MODEL_ID = os.getenv("ROUTER_LLM_MODEL_ID", "Qwen/Qwen2.5-72B-Instruct")
 
 SYSTEM_PROMPT = """You are the SatQuery AI Router.
 
@@ -26,21 +27,22 @@ You do not run tools.
 You only select, sequence, and configure tools from the provided registry.
 
 Rules:
-1. Output valid JSON only.
+1. Output valid JSON only. No markdown fences, no explanation text.
 2. Select the minimum tools required to satisfy the query.
-3. Prefer static geospatial function tools for measurable evidence when applicable.
-4. Use the custom SAR-optical dual encoder as the primary cross-modal tool for SAR-optical pair matching, pair validation, and similarity confidence.
-5. Use CROMA as an additional SAR-optical feature tool when the input is a SAR-optical pair and local GPU light resources are available.
-6. Use RS-LLaVA for single-image remote-sensing VQA, captioning, scene description, and optical semantic reasoning.
-7. Use TEOChat for bi-temporal change VQA or change description.
-8. Use SegEarth-OV only when text-guided segmentation or masks are explicitly required and the endpoint is enabled.
-9. Use SARCLIP only for SAR image-text inference or zero-shot SAR classification. Do not use SARCLIP for primary SAR-optical retrieval.
-10. Skip unavailable or disabled tools and include a clear skipped_tools reason.
-11. Do not generate hidden reasoning text. Only generate the execution plan JSON.
-12. Include dependencies so the executor can run independent tools in parallel.
-13. Always include audit-friendly tool names, parameters, and resource lanes.
-14. If required metadata or modality information is missing, route to metadata_reader, preview_generator first.
-15. Never invent a tool not present in the registry.
+3. Always include metadata_reader and preview_generator in the first group.
+4. Prefer static geospatial function tools for measurable evidence when applicable.
+5. Use the custom SAR-optical dual encoder as the primary cross-modal tool for SAR-optical pair matching, pair validation, and similarity confidence.
+6. Use CROMA as an additional SAR-optical feature tool when the input is a SAR-optical pair and local GPU light resources are available.
+7. Use RS-LLaVA (rsllava_vqa_caption_tool) for single-image remote-sensing VQA, captioning, scene description, and optical semantic reasoning.
+8. Use TEOChat for bi-temporal change VQA or change description.
+9. Use SegEarth-OV only when text-guided segmentation or masks are explicitly required and the endpoint is enabled.
+10. Use SARCLIP only for SAR image-text inference or zero-shot SAR classification. Do not use SARCLIP for primary SAR-optical retrieval.
+11. Skip unavailable or disabled tools and include a clear skipped_tools reason.
+12. Do not generate hidden reasoning text. Only generate the execution plan JSON.
+13. Include dependencies so the executor can run independent tools in parallel.
+14. Always include audit-friendly tool names, parameters, and resource lanes.
+15. If required metadata or modality information is missing, route to metadata_reader, preview_generator first.
+16. Never invent a tool not present in the registry.
 
 Output format:
 {
@@ -89,50 +91,58 @@ def route(router_input: dict) -> ExecutionPlan:
 
 
 def _llm_route(router_input: dict) -> ExecutionPlan | None:
-    """Call the LLM and parse its JSON output into an ExecutionPlan."""
-    try:
-        from backend.geospatial.dependencies import require_module
-        transformers = require_module("transformers", "transformers")
-    except Exception as exc:
-        logger.warning("transformers not installed; cannot use LLM router.")
-        raise ValueError("transformers module not installed") from exc
+    """Call the HF Inference API to route the query into an ExecutionPlan."""
+    import httpx
 
-    try:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(ROUTER_LLM_MODEL_ID)
-        model = transformers.AutoModelForCausalLM.from_pretrained(
-            ROUTER_LLM_MODEL_ID,
-            torch_dtype="auto",
-            device_map="auto",
+    token = os.getenv("HF_TOKEN", "")
+    if not token:
+        raise ValueError("HF_TOKEN not set — cannot use LLM router via HF Inference API.")
+
+    # Build a concise user message (avoid sending massive manifests)
+    compact_input = {
+        "query": router_input.get("query", ""),
+        "input_summary": router_input.get("input_summary", {}),
+        "available_tools": router_input.get("available_tools", []),
+    }
+    user_message = json.dumps(compact_input, indent=2)
+
+    payload = {
+        "model": ROUTER_LLM_MODEL_ID,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        "max_tokens": int(os.getenv("ROUTER_LLM_MAX_TOKENS", "1024")),
+        "temperature": float(os.getenv("ROUTER_LLM_TEMPERATURE", "0.1")),
+    }
+
+    base_url = os.getenv(
+        "HF_INFERENCE_BASE_URL",
+        "https://router.huggingface.co/v1/chat/completions",
+    )
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    logger.info("Calling HF Inference API for routing (%s)...", ROUTER_LLM_MODEL_ID)
+    response = httpx.post(base_url, headers=headers, json=payload, timeout=60)
+
+    if response.is_error:
+        raise RuntimeError(
+            f"HF router API HTTP {response.status_code}: {response.text[:500]}"
         )
-    except Exception as exc:
-        logger.warning("Failed to load LLM model %s: %s", ROUTER_LLM_MODEL_ID, exc)
-        raise ValueError(f"Failed to load LLM model: {exc}") from exc
 
-    user_message = json.dumps(router_input, indent=2)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_message},
-    ]
+    data = response.json()
+    choices = data.get("choices", [])
+    if not choices:
+        raise RuntimeError(f"HF router API returned no choices: {data}")
 
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
-    import torch
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=int(os.getenv("ROUTER_LLM_MAX_TOKENS", "2048")),
-            temperature=float(os.getenv("ROUTER_LLM_TEMPERATURE", "0.1")),
-            do_sample=True,
-        )
-
-    generated = tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
+    generated = choices[0].get("message", {}).get("content", "")
+    logger.info("LLM router raw output length: %d chars", len(generated))
 
     # Extract JSON from response
     plan_json = _extract_json(generated)
     if plan_json is None:
-        logger.warning("LLM output did not contain valid JSON. Raw output: %s", generated)
-        raise ValueError(f"LLM output did not contain valid JSON. Raw output: {generated}")
+        logger.warning("LLM output did not contain valid JSON. Raw output: %s", generated[:500])
+        raise ValueError(f"LLM output did not contain valid JSON. Raw: {generated[:300]}")
 
     # Normalize the LLM output to fix common structural issues
     plan_json = _fix_parallel_groups(plan_json)
@@ -141,13 +151,13 @@ def _llm_route(router_input: dict) -> ExecutionPlan | None:
         return ExecutionPlan.model_validate(plan_json)
     except Exception as exc:
         logger.warning("LLM JSON failed Pydantic validation: %s", exc)
-        raise ValueError(f"LLM JSON failed Pydantic validation: {exc}. JSON: {plan_json}") from exc
+        raise ValueError(f"LLM JSON failed Pydantic validation: {exc}") from exc
 
 
 def _fix_parallel_groups(plan_json: dict) -> dict:
     """Normalize LLM output to fix common structural issues.
 
-    The Qwen model sometimes puts bare step dicts directly in the
+    The LLM sometimes puts bare step dicts directly in the
     parallel_groups list instead of wrapping them in proper group objects
     with group_id, can_run_parallel, and steps fields.
     """

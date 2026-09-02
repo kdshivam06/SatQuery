@@ -91,7 +91,11 @@ class TEOChatTool(BaseTool):
                     imgs_b64.append(base64.b64encode(f.read()).decode())
 
             async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.post(endpoint, json={"images": imgs_b64, "query": query})
+                headers = {"Content-Type": "application/json"}
+                hf_token = os.getenv("HF_TOKEN", "")
+                if hf_token:
+                    headers["Authorization"] = f"Bearer {hf_token}"
+                resp = await client.post(endpoint, headers=headers, json={"images": imgs_b64, "query": query})
                 resp.raise_for_status()
                 data = resp.json()
 

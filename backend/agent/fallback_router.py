@@ -68,19 +68,19 @@ def _preprocess_group(available: set[str]) -> ParallelGroup:
 def _vqa_plan(available: set[str], skipped: list) -> list[ParallelGroup]:
     groups = [_preprocess_group(available)]
     specialist_steps = []
-    geochat_configured = bool(
-        os.getenv("GEOCHAT_SPACE_ID")
-        or os.getenv("GEOCHAT_ENDPOINT")
-        or os.getenv("HF_TOKEN")
-    )
-    if "geochat_vqa_caption_tool" in available and geochat_configured:
-        specialist_steps.append(ExecutionStep(
-            step_id="geochat_vqa", tool="geochat_vqa_caption_tool",
-            depends_on=["preview_generator"], resource_lane="remote_api",
-        ))
-    elif "rsllava_vqa_caption_tool" in available:
+    geochat_enabled = os.getenv("GEOCHAT_ENABLED", "true").lower() == "true"
+    rsllava_enabled = os.getenv("RSLLAVA_ENABLED", "true").lower() == "true"
+    has_hf = bool(os.getenv("HF_TOKEN"))
+
+    # Prefer RS-LLaVA if enabled; fall back to GeoChat
+    if rsllava_enabled and "rsllava_vqa_caption_tool" in available and has_hf:
         specialist_steps.append(ExecutionStep(
             step_id="rsllava_vqa", tool="rsllava_vqa_caption_tool",
+            depends_on=["preview_generator"], resource_lane="remote_api",
+        ))
+    elif geochat_enabled and "geochat_vqa_caption_tool" in available and has_hf:
+        specialist_steps.append(ExecutionStep(
+            step_id="geochat_vqa", tool="geochat_vqa_caption_tool",
             depends_on=["preview_generator"], resource_lane="remote_api",
         ))
     if "custom_sar_optical_dual_encoder_tool" in available:
@@ -131,11 +131,9 @@ def _grounding_plan(available: set[str], modalities: list, bands: dict, skipped:
 
 def _cross_modal_plan(available: set[str], modalities: list, bands: dict, skipped: list) -> list[ParallelGroup]:
     groups = [_preprocess_group(available)]
-    geochat_configured = bool(
-        os.getenv("GEOCHAT_SPACE_ID")
-        or os.getenv("GEOCHAT_ENDPOINT")
-        or os.getenv("HF_TOKEN")
-    )
+    geochat_enabled = os.getenv("GEOCHAT_ENABLED", "true").lower() == "true"
+    rsllava_enabled = os.getenv("RSLLAVA_ENABLED", "true").lower() == "true"
+    has_hf = bool(os.getenv("HF_TOKEN"))
 
     # Validation
     val_steps = []
@@ -148,13 +146,13 @@ def _cross_modal_plan(available: set[str], modalities: list, bands: dict, skippe
         specialist_steps.append(ExecutionStep(step_id="dual_encoder", tool="custom_sar_optical_dual_encoder_tool", depends_on=["metadata_reader"], resource_lane="local_gpu_light"))
     if "croma_cross_modal_feature_tool" in available:
         specialist_steps.append(ExecutionStep(step_id="croma", tool="croma_cross_modal_feature_tool", depends_on=["metadata_reader"], resource_lane="local_gpu_light"))
-    if "geochat_vqa_caption_tool" in available and geochat_configured:
+    if rsllava_enabled and "rsllava_vqa_caption_tool" in available and has_hf:
+        specialist_steps.append(ExecutionStep(step_id="rsllava_vqa", tool="rsllava_vqa_caption_tool", depends_on=["preview_generator"], resource_lane="remote_api"))
+    elif geochat_enabled and "geochat_vqa_caption_tool" in available and has_hf:
         specialist_steps.append(ExecutionStep(
             step_id="geochat_vqa", tool="geochat_vqa_caption_tool",
             depends_on=["preview_generator"], resource_lane="remote_api",
         ))
-    elif "rsllava_vqa_caption_tool" in available:
-        specialist_steps.append(ExecutionStep(step_id="rsllava_vqa", tool="rsllava_vqa_caption_tool", depends_on=["preview_generator"], resource_lane="remote_api"))
 
     # Static evidence
     evidence_steps = []
