@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import HollowGlobe from '../components/HollowGlobe';
+import DemoMode from '../components/DemoMode';
 import '../styles/hero.css';
 
 const API =
@@ -559,6 +560,19 @@ const Hero = ({ isPreloaded = true }) => {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Demo Mode Panel ─────────────────────────────── */}
+      <div className="hero-dashboard-content" style={{ marginTop: '1.5rem' }}>
+        <div className="left-side-containers" style={{ width: '100%', maxWidth: '100%' }} id="demo">
+          <div className="panel" style={{ overflow: 'visible' }}>
+            <div className="panel-header">
+              <span className="panel-title">// MODEL DEMO SCENARIOS</span>
+              <span className="panel-badge">INTERACTIVE · 20 TOOLS</span>
+            </div>
+            <DemoMode />
           </div>
         </div>
       </div>

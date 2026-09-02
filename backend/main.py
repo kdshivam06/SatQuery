@@ -25,6 +25,7 @@ except ImportError:
 from backend.api.routes_analyze import router as analyze_router
 from backend.api.routes_outputs import router as outputs_router
 from backend.api.routes_runs import router as runs_router
+from backend.api.routes_demo import router as demo_router
 
 
 app = FastAPI(
@@ -44,6 +45,7 @@ app.add_middleware(
 app.include_router(analyze_router)
 app.include_router(runs_router)
 app.include_router(outputs_router)
+app.include_router(demo_router)
 
 # ── Static file serving for frontend ──────────────────────
 frontend_dir = Path(__file__).parent.parent / "frontend"

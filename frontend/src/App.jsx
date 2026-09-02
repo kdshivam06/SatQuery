@@ -2,6 +2,7 @@ import React from 'react';
 import Preloader from './pages/Preloader';
 import './styles/preloader.css';
 import './styles/hero.css';
+import './styles/demo.css';
 import './App.css';
 
 function App() {
