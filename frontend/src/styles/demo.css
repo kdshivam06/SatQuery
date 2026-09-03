@@ -30,8 +30,8 @@
     font-weight: 800;
     letter-spacing: 0.1em;
     padding: 0.2rem 0.6rem;
-    background-color: #a78bfa22;
-    color: #a78bfa;
+    background: linear-gradient(135deg, #a78bfa22, #60a5fa22);
+    color: #c4b5fd;
     border: 1px solid #a78bfa55;
     border-radius: 2px;
 }
@@ -39,6 +39,213 @@
 .demo-subtitle {
     font-size: 0.7rem;
     color: #555;
+}
+
+/* Query Input Panel */
+.demo-query-input-panel {
+    background-color: #0d0d0d;
+    border: 1px solid #222;
+    padding: 1.25rem;
+}
+
+.demo-input-wrapper {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    margin-bottom: 1rem;
+}
+
+.demo-query-textarea {
+    flex: 1;
+    background-color: #070707;
+    border: 1px solid #333;
+    border-radius: 2px;
+    color: #e2e8f0;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    padding: 0.65rem 0.85rem;
+    resize: none;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.demo-query-textarea:focus {
+    border-color: #a78bfa;
+}
+
+.demo-query-textarea::placeholder {
+    color: #374151;
+}
+
+.demo-analyze-btn {
+    flex-shrink: 0;
+    height: fit-content;
+}
+
+.demo-analyze-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Suggestions */
+.demo-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.demo-suggestion-label {
+    font-size: 0.6rem;
+    color: #4b5563;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    margin-right: 0.2rem;
+}
+
+.demo-suggestion-chip {
+    font-family: "Geist Mono", monospace;
+    font-size: 0.6rem;
+    color: #6b7280;
+    background: #0d0d0d;
+    border: 1px solid #1f1f1f;
+    padding: 0.2rem 0.55rem;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+    line-height: 1.4;
+}
+
+.demo-suggestion-chip:hover {
+    color: #a78bfa;
+    border-color: #a78bfa44;
+    background: #a78bfa0a;
+}
+
+/* AI Routing Panel */
+.demo-routing-panel {
+    background-color: #080808;
+    border: 1px solid #1a1a1a;
+    border-left: 2px solid #a78bfa;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.demo-routing-inner {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.demo-routing-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #a78bfa33;
+    border-top-color: #a78bfa;
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: demoSpin 0.8s linear infinite;
+}
+
+@keyframes demoSpin {
+    to { transform: rotate(360deg); }
+}
+
+.demo-routing-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #a78bfa;
+    margin-bottom: 0.2rem;
+}
+
+.demo-routing-query {
+    font-size: 0.67rem;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.demo-routing-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding-left: 0.25rem;
+}
+
+.demo-routing-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.63rem;
+    color: #374151;
+    letter-spacing: 0.03em;
+}
+
+.demo-routing-step.done {
+    color: #4ade80;
+}
+
+.demo-routing-step.active {
+    color: #fbbf24;
+    animation: demoPulse 1s infinite alternate;
+}
+
+.demo-routing-step-dot {
+    font-size: 0.6rem;
+    width: 1rem;
+    text-align: center;
+}
+
+/* AI Routed badge */
+.demo-ai-tag {
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #4ade80;
+    background: #052e16;
+    border: 1px solid #4ade8033;
+    padding: 0.1rem 0.45rem;
+    border-radius: 2px;
+}
+
+/* Routed model card */
+.demo-routed-query-box {
+    background: #070707;
+    border: 1px solid #1a1a1a;
+    border-left: 2px solid #60a5fa;
+    padding: 0.55rem 0.7rem;
+    margin-bottom: 0.85rem;
+}
+
+.demo-routed-query-label {
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: #4b5563;
+    margin-bottom: 0.25rem;
+}
+
+.demo-routed-query-text {
+    font-size: 0.67rem;
+    color: #9ca3af;
+    font-style: italic;
+    line-height: 1.5;
+}
+
+.demo-routed-model-card {
+    padding: 0;
+}
+
+.demo-routed-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-top: 0.65rem;
 }
 
 .demo-reset-btn {
@@ -395,7 +602,7 @@
 .demo-empty-state p {
     font-size: 0.72rem;
     line-height: 1.5;
-    max-width: 380px;
+    max-width: 420px;
 }
 
 .demo-empty-sub {
